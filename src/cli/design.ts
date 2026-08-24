@@ -6,6 +6,7 @@ import { StateMachine } from '../engine/state-machine.js';
 import { commitAll, currentBranch } from '../integrations/git/client.js';
 import { designAgent, buildDesignPrompt } from '../agents/design-agent.js';
 import { printInfo, printSuccess, printError, writeFile, extractText, extractUsage } from './helpers.js';
+import { getModelForStep } from '../config.js';
 import type { State } from '../types.js';
 
 export async function runDesign(): Promise<void> {
@@ -43,10 +44,12 @@ export async function runDesign(): Promise<void> {
   printInfo('Generating design document...');
   const prompt = buildDesignPrompt(ticketId, analysisFile, featureDirs, repoRoot);
   const threadId = `${ticketId}-design`;
+  const designModel = getModelForStep(config, 'design');
 
   const startTime = Date.now();
   const result = await designAgent.generate(prompt, {
     memory: { thread: threadId, resource: ticketId },
+    model: designModel,
   });
   const durationSeconds = (Date.now() - startTime) / 1000;
 
@@ -63,7 +66,7 @@ export async function runDesign(): Promise<void> {
       design: {
         status: 'in_progress' as const,
         iterations: 1,
-        model: config.model,
+        model: designModel,
         tokens_in: usage.tokensIn,
         tokens_out: usage.tokensOut,
         duration_seconds: durationSeconds,

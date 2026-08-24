@@ -24,7 +24,7 @@ export const analysisAgent = new Agent({
   id: 'lv-analysis-agent',
   name: 'LV Analysis Agent',
   description: 'Generates and updates requirement analysis documents for software tickets',
-  model: 'anthropic/claude-sonnet-4-6',
+  model: 'openai/gpt-4o',  // overridden at generate() time via config.models.analysis
   memory,
   instructions: `Bạn là một kỹ sư phân tích yêu cầu. Nhiệm vụ của bạn là sinh và cập nhật tài liệu phân tích yêu cầu (01-analysis.md) cho một ticket phát triển phần mềm.
 

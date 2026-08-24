@@ -23,7 +23,7 @@ export const designAgent = new Agent({
   id: 'lv-design-agent',
   name: 'LV Design Agent',
   description: 'Generates and updates technical design documents based on approved analysis',
-  model: 'anthropic/claude-sonnet-4-6',
+  model: 'openai/gpt-4o',  // overridden at generate() time via config.models.design
   memory,
   instructions: `Bạn là một kỹ sư thiết kế hệ thống. Nhiệm vụ của bạn là sinh và cập nhật tài liệu thiết kế kỹ thuật (02-design.md) dựa trên tài liệu phân tích yêu cầu đã được duyệt.
 

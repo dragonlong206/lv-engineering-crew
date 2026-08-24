@@ -1,27 +1,40 @@
-import fs from 'fs';
-import path from 'path';
-import { loadConfig, getRepoRoot, getFeaturesDir } from '../config.js';
-import { Anthropic } from '@anthropic-ai/sdk';
-import { printInfo, printSuccess, printError, writeFile } from './helpers.js';
+import fs from "fs";
+import path from "path";
+import {
+  loadConfig,
+  getRepoRoot,
+  getFeaturesDir,
+  getModelForStep,
+} from "../config.js";
+import OpenAI from "openai";
+import { printInfo, printSuccess, printError, writeFile } from "./helpers.js";
 
 const BOOTSTRAP_HEADER = `<!-- AUTO-GENERATED — chưa được xác nhận. Review và chỉnh sửa trước khi commit. -->
 
 `;
 
-export async function runBootstrap(featureId: string, pathsArg: string): Promise<void> {
+export async function runBootstrap(
+  featureId: string,
+  pathsArg: string,
+): Promise<void> {
   const config = loadConfig();
   const repoRoot = getRepoRoot();
 
-  const paths = pathsArg.split(',').map((p) => p.trim()).filter(Boolean);
+  const paths = pathsArg
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
   if (paths.length === 0) {
-    printError('No paths provided. Use --paths <path1,path2,...>');
+    printError("No paths provided. Use --paths <path1,path2,...>");
     process.exit(1);
   }
 
   // Read code from all specified paths
   const codeContext: string[] = [];
   for (const rawPath of paths) {
-    const absPath = path.isAbsolute(rawPath) ? rawPath : path.join(repoRoot, rawPath);
+    const absPath = path.isAbsolute(rawPath)
+      ? rawPath
+      : path.join(repoRoot, rawPath);
     if (!fs.existsSync(absPath)) {
       printError(`Path not found: ${absPath}`);
       process.exit(1);
@@ -32,35 +45,39 @@ export async function runBootstrap(featureId: string, pathsArg: string): Promise
       const files = getAllFiles(absPath).slice(0, 50); // limit
       for (const file of files) {
         const rel = path.relative(repoRoot, file);
-        const content = fs.readFileSync(file, 'utf-8');
+        const content = fs.readFileSync(file, "utf-8");
         codeContext.push(`### ${rel}\n\`\`\`\n${content}\n\`\`\``);
       }
     } else {
       const rel = path.relative(repoRoot, absPath);
-      const content = fs.readFileSync(absPath, 'utf-8');
+      const content = fs.readFileSync(absPath, "utf-8");
       codeContext.push(`### ${rel}\n\`\`\`\n${content}\n\`\`\``);
     }
   }
 
-  const codeBlock = codeContext.join('\n\n');
+  const codeBlock = codeContext.join("\n\n");
 
   printInfo(`Generating docs for feature '${featureId}'...`);
 
-  const client = new Anthropic({ apiKey: config.anthropic_api_key });
-  const modelId = config.model.replace('anthropic/', '');
+  const modelFull = getModelForStep(config, "bootstrap");
+  // Strip provider prefix — OpenAI SDK uses bare model IDs (e.g. "gpt-4o")
+  const modelId = modelFull.replace(/^[^/]+\//, "");
+  const client = new OpenAI({ apiKey: config.openai_api_key });
 
-  const overviewResponse = await client.messages.create({
-    model: modelId,
-    max_tokens: 4096,
-    messages: [
-      {
-        role: 'user',
-        content: `Bạn là một kỹ sư phân tích hệ thống. Đọc code sau và sinh tài liệu overview.md cho feature '${featureId}'.
+  const [overviewResponse, designResponse] = await Promise.all([
+    client.chat.completions.create({
+      model: modelId,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: `Bạn là một kỹ sư phân tích hệ thống. Đọc code sau và sinh tài liệu overview.md cho feature '${featureId}'.
 
 overview.md mô tả:
 - Mục đích của feature
 - Các thành phần chính
 - Luồng hoạt động tổng quan
+- Các ràng buộc và giả định
 - Trạng thái hiện tại của code
 
 Viết ngắn gọn, súc tích. Chỉ trả về nội dung Markdown, không có text nào khác.
@@ -68,17 +85,16 @@ Viết ngắn gọn, súc tích. Chỉ trả về nội dung Markdown, không c�
 ## Code
 
 ${codeBlock}`,
-      },
-    ],
-  });
-
-  const designResponse = await client.messages.create({
-    model: modelId,
-    max_tokens: 4096,
-    messages: [
-      {
-        role: 'user',
-        content: `Bạn là một kỹ sư thiết kế hệ thống. Đọc code sau và sinh tài liệu design.md cho feature '${featureId}'.
+        },
+      ],
+    }),
+    client.chat.completions.create({
+      model: modelId,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: `Bạn là một kỹ sư thiết kế hệ thống. Đọc code sau và sinh tài liệu design.md cho feature '${featureId}'.
 
 design.md mô tả:
 - Kiến trúc và các lớp
@@ -91,37 +107,42 @@ Viết ngắn gọn, súc tích. Chỉ trả về nội dung Markdown, không c�
 ## Code
 
 ${codeBlock}`,
-      },
-    ],
-  });
+        },
+      ],
+    }),
+  ]);
 
-  const overviewText = overviewResponse.content
-    .map((b) => ('text' in b && typeof b.text === 'string' ? b.text : ''))
-    .join('');
-
-  const designText = designResponse.content
-    .map((b) => ('text' in b && typeof b.text === 'string' ? b.text : ''))
-    .join('');
+  const overviewText = overviewResponse.choices[0]?.message.content ?? "";
+  const designText = designResponse.choices[0]?.message.content ?? "";
 
   const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
   fs.mkdirSync(featureDir, { recursive: true });
 
-  writeFile(path.join(featureDir, 'overview.md'), BOOTSTRAP_HEADER + overviewText);
-  writeFile(path.join(featureDir, 'design.md'), BOOTSTRAP_HEADER + designText);
+  writeFile(
+    path.join(featureDir, "overview.md"),
+    BOOTSTRAP_HEADER + overviewText,
+  );
+  writeFile(path.join(featureDir, "design.md"), BOOTSTRAP_HEADER + designText);
 
   // Update INDEX.md
   updateIndex(repoRoot, featureId);
 
   printSuccess(`Generated docs for '${featureId}'.`);
   console.log(`\nFiles written (not committed):`);
-  console.log(`  ${path.join(featureDir, 'overview.md')}`);
-  console.log(`  ${path.join(featureDir, 'design.md')}`);
+  console.log(`  ${path.join(featureDir, "overview.md")}`);
+  console.log(`  ${path.join(featureDir, "design.md")}`);
   console.log(`\nReview, edit, then commit manually.`);
 }
 
 function getAllFiles(dir: string): string[] {
   const result: string[] = [];
-  const skip = new Set(['node_modules', '.git', 'dist', '__pycache__', '.venv']);
+  const skip = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    "__pycache__",
+    ".venv",
+  ]);
 
   function walk(d: string) {
     for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
@@ -129,7 +150,9 @@ function getAllFiles(dir: string): string[] {
       const full = path.join(d, entry.name);
       if (entry.isDirectory()) {
         walk(full);
-      } else if (/\.(ts|js|py|go|java|rb|rs|md|yaml|yml|json)$/.test(entry.name)) {
+      } else if (
+        /\.(ts|js|py|go|java|rb|rs|md|yaml|yml|json)$/.test(entry.name)
+      ) {
         result.push(full);
       }
     }
@@ -140,7 +163,7 @@ function getAllFiles(dir: string): string[] {
 }
 
 function updateIndex(repoRoot: string, featureId: string): void {
-  const indexFile = path.join(getFeaturesDir(repoRoot), 'INDEX.md');
+  const indexFile = path.join(getFeaturesDir(repoRoot), "INDEX.md");
   const line = `- [${featureId}](./${featureId}/overview.md)`;
 
   if (!fs.existsSync(indexFile)) {
@@ -148,7 +171,7 @@ function updateIndex(repoRoot: string, featureId: string): void {
     return;
   }
 
-  const content = fs.readFileSync(indexFile, 'utf-8');
+  const content = fs.readFileSync(indexFile, "utf-8");
   if (content.includes(line)) return;
 
   fs.appendFileSync(indexFile, `${line}\n`);

@@ -34,12 +34,21 @@ export const LarkConfigSchema = z.object({
   feature_id_field: z.string().default('Feature ID'),
 });
 
+export const ModelsConfigSchema = z.object({
+  analysis: z.string().optional(),
+  design: z.string().optional(),
+  bootstrap: z.string().optional(),
+});
+export type ModelsConfig = z.infer<typeof ModelsConfigSchema>;
+
 export const ConfigSchema = z.object({
   lark: LarkConfigSchema,
   default_branch: z.string().default('main'),
-  model: z.string().default('anthropic/claude-sonnet-4-6'),
+  model: z.string().default('openai/gpt-4o'),
+  models: ModelsConfigSchema.optional(),
   lark_token: z.string(),
-  anthropic_api_key: z.string(),
+  openai_api_key: z.string().optional(),
+  anthropic_api_key: z.string().optional(),
 });
 export type Config = z.infer<typeof ConfigSchema>;
 

@@ -7,6 +7,7 @@ import { writeState } from '../engine/state-io.js';
 import { analysisAgent, buildAnalysisPrompt } from '../agents/analysis-agent.js';
 import { printInfo, printSuccess, printError, writeFile, extractText, extractUsage } from './helpers.js';
 import { LV_VERSION } from '../types.js';
+import { getModelForStep } from '../config.js';
 
 export async function runStart(ticketId: string): Promise<void> {
   const config = loadConfig();
@@ -56,9 +57,11 @@ export async function runStart(ticketId: string): Promise<void> {
   const prompt = buildAnalysisPrompt(ticket, featureDirs, repoRoot);
   const threadId = `${ticketId}-analysis`;
 
+  const analysisModel = getModelForStep(config, 'analysis');
   const startTime = Date.now();
   const result = await analysisAgent.generate(prompt, {
     memory: { thread: threadId, resource: ticketId },
+    model: analysisModel,
   });
   const durationSeconds = (Date.now() - startTime) / 1000;
 
@@ -79,7 +82,7 @@ export async function runStart(ticketId: string): Promise<void> {
       analysis: {
         status: 'in_progress',
         iterations: 1,
-        model: config.model,
+        model: analysisModel,
         tokens_in: usage.tokensIn,
         tokens_out: usage.tokensOut,
         duration_seconds: durationSeconds,

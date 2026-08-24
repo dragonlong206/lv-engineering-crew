@@ -6,6 +6,7 @@ import { commitAll } from '../integrations/git/client.js';
 import { analysisAgent, buildUpdatePrompt } from '../agents/analysis-agent.js';
 import { designAgent, buildDesignUpdatePrompt } from '../agents/design-agent.js';
 import { printInfo, printSuccess, printError, openEditor, writeFile, extractText, extractUsage } from './helpers.js';
+import { getModelForStep } from '../config.js';
 import type { State } from '../types.js';
 
 export async function runAnswer(): Promise<void> {
@@ -45,10 +46,12 @@ export async function runAnswer(): Promise<void> {
     : buildDesignUpdatePrompt(ticketId, docFile);
 
   const agent = currentStep === 'analysis' ? analysisAgent : designAgent;
+  const stepModel = getModelForStep(config, currentStep);
 
   const startTime = Date.now();
   const result = await agent.generate(prompt, {
     memory: { thread: threadId, resource: ticketId },
+    model: stepModel,
   });
   const durationSeconds = (Date.now() - startTime) / 1000;
 
@@ -60,7 +63,7 @@ export async function runAnswer(): Promise<void> {
   const stepRecord = state.steps[currentStep] ?? {
     status: 'in_progress' as const,
     iterations: 0,
-    model: config.model,
+    model: stepModel,
     tokens_in: 0,
     tokens_out: 0,
     duration_seconds: 0,
@@ -69,7 +72,7 @@ export async function runAnswer(): Promise<void> {
     ...stepRecord,
     status: 'in_progress' as const,
     iterations: stepRecord.iterations + 1,
-    model: config.model,
+    model: stepModel,
     tokens_in: stepRecord.tokens_in + usage.tokensIn,
     tokens_out: stepRecord.tokens_out + usage.tokensOut,
     duration_seconds: stepRecord.duration_seconds + durationSeconds,

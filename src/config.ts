@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import os from 'os';
-import { ConfigSchema, type Config } from './types.js';
+import { ConfigSchema, type Config, type Step } from './types.js';
 
 function findRepoRoot(startDir: string): string {
   let dir = startDir;
@@ -30,6 +30,7 @@ export function loadConfig(): Config {
     ...userConfig,
     ...repoConfig,
     lark_token: process.env['LARK_TOKEN'] ?? userConfig['lark_token'],
+    openai_api_key: process.env['OPENAI_API_KEY'] ?? userConfig['openai_api_key'],
     anthropic_api_key: process.env['ANTHROPIC_API_KEY'] ?? userConfig['anthropic_api_key'],
   };
 
@@ -56,4 +57,8 @@ export function getFeaturesDir(repoRoot: string): string {
 
 export function getFeatureDir(repoRoot: string, featureId: string): string {
   return path.join(repoRoot, 'docs', 'features', featureId);
+}
+
+export function getModelForStep(config: Config, step: Step | 'bootstrap'): string {
+  return config.models?.[step] ?? config.model;
 }
