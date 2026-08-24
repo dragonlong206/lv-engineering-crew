@@ -6,12 +6,15 @@ import {
   getFeaturesDir,
   getModelForStep,
 } from "../config.js";
-import OpenAI from "openai";
-import { printInfo, printSuccess, printError, writeFile } from "./helpers.js";
+import { Agent } from "@mastra/core/agent";
+import { printInfo, printSuccess, printError, writeFile, extractText } from "./helpers.js";
+import { BOOTSTRAP_HEADER, buildBootstrapOverviewPrompt, buildBootstrapDesignPrompt } from "../prompts.js";
 
-const BOOTSTRAP_HEADER = `<!-- AUTO-GENERATED — chưa được xác nhận. Review và chỉnh sửa trước khi commit. -->
-
-`;
+const bootstrapAgent = new Agent({
+  id: "lv-bootstrap-agent",
+  name: "LV Bootstrap Agent",
+  model: "openai/gpt-4o-mini",
+});
 
 export async function runBootstrap(
   featureId: string,
@@ -59,61 +62,15 @@ export async function runBootstrap(
 
   printInfo(`Generating docs for feature '${featureId}'...`);
 
-  const modelFull = getModelForStep(config, "bootstrap");
-  // Strip provider prefix — OpenAI SDK uses bare model IDs (e.g. "gpt-4o")
-  const modelId = modelFull.replace(/^[^/]+\//, "");
-  const client = new OpenAI({ apiKey: config.openai_api_key });
+  const model = getModelForStep(config, "bootstrap");
 
-  const [overviewResponse, designResponse] = await Promise.all([
-    client.chat.completions.create({
-      model: modelId,
-      max_tokens: 4096,
-      messages: [
-        {
-          role: "user",
-          content: `Bạn là một kỹ sư phân tích hệ thống. Đọc code sau và sinh tài liệu overview.md cho feature '${featureId}'.
-
-overview.md mô tả:
-- Mục đích của feature
-- Các thành phần chính
-- Luồng hoạt động tổng quan
-- Các ràng buộc và giả định
-- Trạng thái hiện tại của code
-
-Viết ngắn gọn, súc tích. Chỉ trả về nội dung Markdown, không có text nào khác.
-
-## Code
-
-${codeBlock}`,
-        },
-      ],
-    }),
-    client.chat.completions.create({
-      model: modelId,
-      max_tokens: 4096,
-      messages: [
-        {
-          role: "user",
-          content: `Bạn là một kỹ sư thiết kế hệ thống. Đọc code sau và sinh tài liệu design.md cho feature '${featureId}'.
-
-design.md mô tả:
-- Kiến trúc và các lớp
-- Data model / schema
-- API / interface
-- Các quyết định thiết kế quan trọng
-
-Viết ngắn gọn, súc tích. Chỉ trả về nội dung Markdown, không có text nào khác.
-
-## Code
-
-${codeBlock}`,
-        },
-      ],
-    }),
+  const [overviewResult, designResult] = await Promise.all([
+    bootstrapAgent.generate(buildBootstrapOverviewPrompt(featureId, codeBlock), { model }),
+    bootstrapAgent.generate(buildBootstrapDesignPrompt(featureId, codeBlock), { model }),
   ]);
 
-  const overviewText = overviewResponse.choices[0]?.message.content ?? "";
-  const designText = designResponse.choices[0]?.message.content ?? "";
+  const overviewText = extractText(overviewResult);
+  const designText = extractText(designResult);
 
   const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
   fs.mkdirSync(featureDir, { recursive: true });

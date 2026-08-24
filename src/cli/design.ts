@@ -4,7 +4,8 @@ import { loadConfig, getRepoRoot, getChangesDir, getFeatureDir } from '../config
 import { readState, writeState } from '../engine/state-io.js';
 import { StateMachine } from '../engine/state-machine.js';
 import { commitAll, currentBranch } from '../integrations/git/client.js';
-import { designAgent, buildDesignPrompt } from '../agents/design-agent.js';
+import { designAgent } from '../agents/design-agent.js';
+import { buildDesignPrompt } from '../prompts.js';
 import { printInfo, printSuccess, printError, writeFile, extractText, extractUsage } from './helpers.js';
 import { getModelForStep } from '../config.js';
 import type { State } from '../types.js';

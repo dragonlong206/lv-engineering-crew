@@ -1,16 +1,16 @@
 # lv design
 
-Sinh tài liệu thiết kế kỹ thuật. Chỉ chạy được khi analysis đã approved. Nạp feature docs + 01-analysis.md vào context, gọi design agent, ghi 02-design.md, advance state sang bước design.
+Generates the technical design document. Only runs when analysis is approved. Loads feature docs + 01-analysis.md into context, calls the design agent, writes 02-design.md, advances state to the design step.
 
-## Code chính
+## Main code
 
 - `src/cli/design.ts`
 - `src/agents/design-agent.ts`
 - `src/engine/state-machine.ts` — canRun('design'), advance()
 
-## Luồng
+## Flow
 
 1. Check analysis.status === 'approved'
-2. designAgent.generate → ghi 02-design.md
+2. designAgent.generate → write 02-design.md
 3. machine.advance() → current_step = 'design'
 4. writeState + commitAll

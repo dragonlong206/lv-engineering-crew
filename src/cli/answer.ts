@@ -3,8 +3,9 @@ import { loadConfig, getRepoRoot, getChangesDir } from '../config.js';
 import { readState, writeState } from '../engine/state-io.js';
 import { StateMachine } from '../engine/state-machine.js';
 import { commitAll } from '../integrations/git/client.js';
-import { analysisAgent, buildUpdatePrompt } from '../agents/analysis-agent.js';
-import { designAgent, buildDesignUpdatePrompt } from '../agents/design-agent.js';
+import { analysisAgent } from '../agents/analysis-agent.js';
+import { designAgent } from '../agents/design-agent.js';
+import { buildAnalysisUpdatePrompt, buildDesignUpdatePrompt } from '../prompts.js';
 import { printInfo, printSuccess, printError, openEditor, writeFile, extractText, extractUsage } from './helpers.js';
 import { getModelForStep } from '../config.js';
 import type { State } from '../types.js';
@@ -42,7 +43,7 @@ export async function runAnswer(): Promise<void> {
   const threadId = `${ticketId}-${currentStep}`;
 
   const prompt = currentStep === 'analysis'
-    ? buildUpdatePrompt(ticketId, docFile, '01-analysis.md')
+    ? buildAnalysisUpdatePrompt(ticketId, docFile, '01-analysis.md')
     : buildDesignUpdatePrompt(ticketId, docFile);
 
   const agent = currentStep === 'analysis' ? analysisAgent : designAgent;

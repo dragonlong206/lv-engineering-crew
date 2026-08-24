@@ -1,10 +1,11 @@
 # Feature Index
 
-| Feature ID | Mô tả |
+| Feature ID | Description |
 |---|---|
-| [lv-bootstrap](./lv-bootstrap/overview.md) | Lệnh bootstrap: tạo tài liệu ban đầu từ code có sẵn |
-| [lv-start](./lv-start/overview.md) | Lệnh start: fetch ticket, tạo branch, sinh analysis doc |
-| [lv-answer](./lv-answer/overview.md) | Lệnh answer: vòng lặp Q&A giữa engineer và agent |
-| [lv-approve](./lv-approve/overview.md) | Lệnh approve: chốt bước hiện tại, chuyển sang bước kế tiếp |
-| [lv-design](./lv-design/overview.md) | Lệnh design: sinh design doc sau khi analysis được approve |
-| [lv-status](./lv-status/overview.md) | Lệnh status: in trạng thái hiện tại của ticket |
+| [lv-bootstrap](./lv-bootstrap/overview.md) | bootstrap: generate initial docs from existing code |
+| [lv-start](./lv-start/overview.md) | start: fetch ticket, create branch, generate analysis doc |
+| [lv-answer](./lv-answer/overview.md) | answer: Q&A loop between engineer and agent |
+| [lv-approve](./lv-approve/overview.md) | approve: lock the current step, advance to the next |
+| [lv-design](./lv-design/overview.md) | design: generate design doc after analysis is approved |
+| [lv-status](./lv-status/overview.md) | status: print current ticket state |
+- [lv-bootstrap](./lv-bootstrap/overview.md)

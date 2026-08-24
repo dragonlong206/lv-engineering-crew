@@ -1,14 +1,14 @@
 lark:
   base_id: "xxx"
   table_id: "xxx"
-  feature_id_field: "Feature ID"   # tên cột chứa feature ID trong Lark Base
+  feature_id_field: "Feature ID"   # column name for feature IDs in Lark Base
 
 default_branch: main
 
-# Model mặc định nếu không khai báo per-step
+# Default model — used when no per-step model is declared
 model: openai/gpt-4o
 
-# Model theo từng bước — bỏ field để dùng model mặc định
+# Per-step model — omit a field to fall back to the default
 models:
   analysis: openai/gpt-4o
   design: openai/gpt-4o

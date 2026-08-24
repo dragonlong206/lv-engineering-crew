@@ -3,3 +3,4 @@ dist/
 *.js.map
 .env
 bun.lock
+.lv.local.yaml

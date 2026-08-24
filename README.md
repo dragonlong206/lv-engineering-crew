@@ -1,157 +1,159 @@
 # LV Engineer Crew
 
-CLI tool hỗ trợ spec-driven development với human-in-the-loop. Tự động hóa vòng lặp phân tích yêu cầu và thiết kế kỹ thuật, có engineer review và chốt từng bước.
+CLI tool for spec-driven development with human-in-the-loop. Automates the requirement analysis and technical design loop, with engineers reviewing and approving each step.
 
-## Quy trình (giai đoạn 1)
+## Workflow (phase 1)
 
 ```
-lv start <ticket-id>   →  sinh 01-analysis.md + câu hỏi
-lv answer              →  engineer trả lời, agent cập nhật
-lv approve             →  chốt analysis
-lv design              →  sinh 02-design.md + câu hỏi
-lv answer              →  engineer trả lời, agent cập nhật
-lv approve             →  chốt design → tạo MR
+lv start <ticket-id>   →  generate 01-analysis.md + open questions
+lv answer              →  engineer answers, agent updates doc
+lv approve             →  lock analysis
+lv design              →  generate 02-design.md + open questions
+lv answer              →  engineer answers, agent updates doc
+lv approve             →  lock design → create MR
 ```
 
-## Cài đặt
+## Installation
 
-Yêu cầu: Node.js >= 20
+Requires: Node.js >= 20
 
 ```bash
 git clone <repo>
 cd lv-engineer-crew
 npm install
 npm run build
-npm link   # cài lệnh lv global
+npm link   # install lv globally
 ```
 
-## Cấu hình
+## Configuration
 
-### 1. Config repo (`.lv.yaml` ở root của repo đích)
+### 1. Repo config (`.lv.yaml` at the root of the target repo)
 
 ```yaml
 lark:
   base_id: "YOUR_BASE_ID"
   table_id: "YOUR_TABLE_ID"
-  feature_id_field: "Feature ID"   # tên cột Feature ID trong Lark Base
+  feature_id_field: "Feature ID"   # column name for feature IDs in Lark Base
 
 default_branch: main
 
-model: openai/gpt-4o   # model mặc định
+model: openai/gpt-4o   # default model
 
-models:                # model per-step — bỏ trống để dùng model mặc định
+models:                # per-step model — omit to use the default
   analysis: openai/gpt-4o
   design: openai/gpt-4o
   bootstrap: openai/gpt-4o-mini
 ```
 
-### 2. Credentials (`~/.config/lv/config.yaml` hoặc env vars)
+### 2. Credentials
+
+**Option A — local override file (recommended)**
+
+```bash
+cp .lv.local.yaml.sample .lv.local.yaml
+# fill in real values — file is gitignored
+```
 
 ```yaml
 lark_token: t-xxx
 openai_api_key: sk-xxx
+# anthropic_api_key: sk-ant-xxx  # only if using Anthropic models
 ```
 
-Hoặc:
+**Option B — env vars**
 
 ```bash
 export LARK_TOKEN=t-xxx
 export OPENAI_API_KEY=sk-xxx
 ```
 
-Nếu dùng Anthropic models ở bất kỳ step nào, thêm:
+Env vars take priority over `.lv.local.yaml`.
 
-```bash
-export ANTHROPIC_API_KEY=sk-ant-xxx
-```
-
-Env vars được ưu tiên hơn config file.
-
-## Cấu trúc docs trong repo đích
+## Doc structure in the target repo
 
 ```
 docs/
   features/
-    INDEX.md                      # danh sách features, map feature-id → tên/path
+    INDEX.md                      # feature list, feature-id → name/path
     <feature-id>/
-      overview.md                 # trạng thái hiện tại của feature
-      design.md                   # kiến trúc, data model, API contract
+      overview.md                 # current state of the feature
+      design.md                   # architecture, data model, API contract
   changes/
     <ticket-id>/
-      01-analysis.md              # tài liệu phân tích yêu cầu
-      02-design.md                # tài liệu thiết kế kỹ thuật
-      state.yaml                  # trạng thái workflow (nguồn sự thật duy nhất)
+      01-analysis.md              # requirement analysis document
+      02-design.md                # technical design document
+      state.yaml                  # workflow state (single source of truth)
 ```
 
-## Các lệnh
+## Commands
 
 ### `lv bootstrap <feature-id> --paths <paths>`
 
-Tạo docs ban đầu cho feature chưa có docs, từ code có sẵn.
+Generate initial docs for a feature that has no docs yet, from existing code.
 
 ```bash
 lv bootstrap checkout-flow --paths src/checkout,src/cart
 ```
 
-- Đọc code ở các đường dẫn chỉ định
-- Sinh `overview.md` và `design.md` với header "AUTO-GENERATED"
-- Cập nhật `docs/features/INDEX.md`
-- **Không commit** — engineer tự review và commit
+- Reads code at the specified paths
+- Generates `overview.md` and `design.md` with an "AUTO-GENERATED" header
+- Updates `docs/features/INDEX.md`
+- **Does not commit** — engineer reviews and commits manually
 
 ### `lv start <ticket-id>`
 
-Bắt đầu một ticket mới.
+Start a new ticket.
 
 ```bash
 lv start PROJ-123
 ```
 
-- Fetch record từ Lark Base
-- Validate feature ID tồn tại trong `docs/features/`
-- Tạo branch `lv/PROJ-123` từ default branch
-- Sinh `01-analysis.md` kèm danh sách câu hỏi
-- Commit và push branch
+- Fetches the record from Lark Base
+- Validates that the feature ID exists in `docs/features/`
+- Creates branch `lv/PROJ-123` from the default branch
+- Generates `01-analysis.md` with open questions
+- Commits and pushes the branch
 
 ### `lv answer`
 
-Mở file hiện tại trong editor để engineer trả lời câu hỏi, sau đó agent cập nhật tài liệu.
+Opens the current document in the editor for the engineer to answer questions, then the agent updates the document.
 
 ```bash
 lv answer
 ```
 
-- Mở `$EDITOR` (fallback: `notepad` trên Windows, `vi` trên Unix)
-- Sau khi đóng editor, agent đọc lại và cập nhật tài liệu
-- Commit kết quả
-- Có thể chạy nhiều lần cho đến khi hết câu hỏi
+- Opens `$EDITOR` (fallback: `notepad` on Windows, `vi` on Unix)
+- After the editor closes, the agent re-reads and updates the document
+- Commits the result
+- Can be run multiple times until all questions are resolved
 
 ### `lv approve`
 
-Chốt bước hiện tại.
+Lock the current step.
 
 ```bash
 lv approve
 ```
 
-- Set `status: approved` trong `state.yaml`
-- Commit state và artifact trong cùng một commit
-- In ra lệnh tiếp theo cần chạy
+- Sets `status: approved` in `state.yaml`
+- Commits state and artifact in the same commit
+- Prints the next command to run
 
 ### `lv design`
 
-Sinh tài liệu thiết kế kỹ thuật. Chỉ chạy được sau khi analysis đã approve.
+Generate the technical design document. Only runs after analysis has been approved.
 
 ```bash
 lv design
 ```
 
-- Nạp context: feature docs + `01-analysis.md` đã chốt
-- Sinh `02-design.md` kèm câu hỏi
-- Commit kết quả
+- Loads context: feature docs + approved `01-analysis.md`
+- Generates `02-design.md` with open questions
+- Commits the result
 
 ### `lv status`
 
-In trạng thái hiện tại của ticket.
+Print the current state of the ticket.
 
 ```bash
 lv status
@@ -168,23 +170,23 @@ Steps:
   design     in_progress  iter=1  tokens=4,100   3.5s  model=openai/gpt-4o
 ```
 
-## Điều kiện để một ticket có thể start
+## Prerequisites to start a ticket
 
-Ticket trong Lark Base phải có:
-- Cột Feature ID (tên cột khai báo trong `.lv.yaml`) có giá trị
-- Feature ID trỏ tới thư mục tồn tại trong `docs/features/`
+The Lark Base record must have:
+- A value in the Feature ID column (column name declared in `.lv.yaml`)
+- A Feature ID that points to an existing directory in `docs/features/`
 
-Nếu feature chưa có docs, chạy `lv bootstrap` trước.
+If the feature has no docs yet, run `lv bootstrap` first.
 
 ## Tracing
 
 ```bash
-npm run mastra   # mở localhost:4111 để xem traces
+npm run mastra   # open localhost:4111 to view traces
 ```
 
 ## Stack
 
 - TypeScript + Node.js
 - [Mastra](https://mastra.ai) — agent, thread memory, MCP client, OTel tracing
-- LibSQL (SQLite local) — conversation history của agent
-- `state.yaml` trong git — nguồn sự thật duy nhất về business state
+- LibSQL (SQLite local) — agent conversation history
+- `state.yaml` in git — single source of truth for business state

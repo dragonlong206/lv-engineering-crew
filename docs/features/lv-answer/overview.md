@@ -1,18 +1,18 @@
 # lv answer
 
-Vòng lặp Q&A. Mở file hiện tại (`01-analysis.md` hoặc `02-design.md`) trong editor mặc định, đọc lại sau khi engineer đóng, gọi agent để cập nhật tài liệu dựa trên nội dung mới, commit.
+Q&A loop. Opens the current document (`01-analysis.md` or `02-design.md`) in the default editor, re-reads it after the engineer closes the editor, calls the agent to update the document based on the new content, commits.
 
-## Code chính
+## Main code
 
 - `src/cli/answer.ts` — orchestration
-- `src/agents/analysis-agent.ts` / `design-agent.ts` — cập nhật tài liệu
+- `src/agents/analysis-agent.ts` / `design-agent.ts` — update the document
 - `src/engine/state-machine.ts` — canRun('answer')
 - `src/cli/helpers.ts` — openEditor
 
-## Luồng
+## Flow
 
-1. Xác định ticket từ branch name (lv/<ticket-id>)
-2. Đọc state → kiểm tra canRun
-3. Mở editor với file hiện tại
-4. Đọc lại file → agent.generate với thread cũ
-5. Ghi file mới, increment iterations, commit
+1. Identify ticket from branch name (lv/<ticket-id>)
+2. Read state → check canRun
+3. Open editor with current document
+4. Re-read file → agent.generate with existing thread
+5. Write updated file, increment iterations, commit

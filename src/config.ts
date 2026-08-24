@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
-import os from 'os';
 import { ConfigSchema, type Config, type Step } from './types.js';
+
 
 function findRepoRoot(startDir: string): string {
   let dir = startDir;
@@ -23,21 +23,28 @@ export function loadConfig(): Config {
   const repoRoot = findRepoRoot(process.cwd());
 
   const repoConfig = readYamlFile(path.join(repoRoot, '.lv.yaml'));
-  const userConfigPath = path.join(os.homedir(), '.config', 'lv', 'config.yaml');
-  const userConfig = readYamlFile(userConfigPath);
+  const localConfig = readYamlFile(path.join(repoRoot, '.lv.local.yaml'));
 
-  const merged = {
-    ...userConfig,
-    ...repoConfig,
-    lark_token: process.env['LARK_TOKEN'] ?? userConfig['lark_token'],
-    openai_api_key: process.env['OPENAI_API_KEY'] ?? userConfig['openai_api_key'],
-    anthropic_api_key: process.env['ANTHROPIC_API_KEY'] ?? userConfig['anthropic_api_key'],
-  };
+  // Env vars (uppercased key) take priority over local file values.
+  const envOverrides = Object.fromEntries(
+    Object.keys(localConfig)
+      .filter((k) => process.env[k.toUpperCase()] !== undefined)
+      .map((k) => [k, process.env[k.toUpperCase()]]),
+  );
+
+  const merged = { ...repoConfig, ...localConfig, ...envOverrides };
 
   const result = ConfigSchema.safeParse(merged);
   if (!result.success) {
     const missing = result.error.issues.map((i) => i.path.join('.')).join(', ');
     throw new Error(`Config invalid — missing or wrong fields: ${missing}`);
+  }
+
+  // Bridge string config values into process.env (uppercase key) so Mastra and
+  // other SDKs can find them. Convention: yaml key = env var name lowercased.
+  for (const [key, value] of Object.entries(result.data)) {
+    const envKey = key.toUpperCase();
+    if (typeof value === 'string' && !process.env[envKey]) process.env[envKey] = value;
   }
 
   return result.data;
