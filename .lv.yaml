@@ -18,3 +18,10 @@ models:
 # Feature ID auto-increment used by `lv init` (e.g. F0001, F0002, ...)
 feature_id_prefix: "F"
 feature_id_digits: 4
+
+# Which files `lv bootstrap`/`lv init` read from the target repo.
+# Omit either to use the built-in default (src/tools/codebase.ts) — covers
+# a broad set of stacks already, including .NET/C#/ASP.NET. Override for a
+# stack the default doesn't cover, e.g.:
+# scan_extensions: [cs, vb, cshtml, razor, csproj, sln, json, xml, config]
+# scan_skip_dirs: [bin, obj, .vs, packages, node_modules, .git]

@@ -52,6 +52,13 @@ models:                # per-step model — omit to use the default
 
 feature_id_prefix: "F"   # used by `lv init` to allocate feature IDs (e.g. F0001)
 feature_id_digits: 4
+
+# Which files `lv bootstrap`/`lv init` read from the target repo.
+# Omit either to use the built-in default, which already covers a broad set
+# of stacks (TS/JS, Python, Go, Java/Kotlin, Ruby, Rust, C#/.NET/ASP.NET,
+# PHP, C/C++, Swift). Override for a stack the default doesn't cover.
+scan_extensions: [cs, vb, cshtml, razor, csproj, sln, json, xml, config]
+scan_skip_dirs: [bin, obj, .vs, packages, node_modules, .git]
 ```
 
 ### 2. Credentials

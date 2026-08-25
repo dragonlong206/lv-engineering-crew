@@ -49,6 +49,10 @@ export const ConfigSchema = z.object({
   models: ModelsConfigSchema.optional(),
   feature_id_prefix: z.string().default("F"),
   feature_id_digits: z.number().int().positive().default(4),
+  // Override which files `lv bootstrap`/`lv init` read from the target repo.
+  // Omit either to use the built-in default list (src/tools/codebase.ts).
+  scan_extensions: z.array(z.string()).optional(),
+  scan_skip_dirs: z.array(z.string()).optional(),
   lark_token: z.string().optional(),
   openai_api_key: z.string().optional(),
   anthropic_api_key: z.string().optional(),

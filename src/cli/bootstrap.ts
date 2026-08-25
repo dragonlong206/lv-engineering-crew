@@ -15,7 +15,7 @@ import {
   buildBootstrapScanPrompt,
 } from "../prompts.js";
 import { listCodeFiles } from "../tools/codebase.js";
-import { bootstrapScanAgent } from "../agents/bootstrap-agent.js";
+import { createBootstrapScanAgent } from "../agents/bootstrap-agent.js";
 import type { Config } from "../types.js";
 
 const bootstrapAgent = new Agent({
@@ -76,7 +76,7 @@ async function runBootstrapFromPaths(
 
     const stat = fs.statSync(absPath);
     if (stat.isDirectory()) {
-      const files = listCodeFiles(absPath).slice(0, 50); // limit
+      const files = listCodeFiles(absPath, config.scan_extensions, config.scan_skip_dirs).slice(0, 50); // limit
       for (const file of files) {
         const rel = path.relative(repoRoot, file);
         const content = fs.readFileSync(file, "utf-8");
@@ -151,7 +151,8 @@ async function runBootstrapFromScan(
     hint?.name,
     hint?.description,
   );
-  const result = await bootstrapScanAgent.generate(prompt, { model, maxSteps: 18 });
+  const scanAgent = createBootstrapScanAgent(config.scan_extensions, config.scan_skip_dirs);
+  const result = await scanAgent.generate(prompt, { model, maxSteps: 18 });
   const text = extractText(result);
   const parsed = extractJson<{ overviewMarkdown: string; designMarkdown: string }>(text);
 
