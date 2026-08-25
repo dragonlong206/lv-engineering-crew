@@ -32,6 +32,7 @@ export const LarkConfigSchema = z.object({
   base_id: z.string(),
   table_id: z.string(),
   feature_id_field: z.string().default("Feature ID"),
+  title_field: z.string().default("Title"),
 });
 
 export const ModelsConfigSchema = z.object({
@@ -57,7 +58,8 @@ export const ConfigSchema = z.object({
   // Omit either to use the built-in default list (src/tools/codebase.ts).
   scan_extensions: z.array(z.string()).optional(),
   scan_skip_dirs: z.array(z.string()).optional(),
-  lark_token: z.string().optional(),
+  lark_app_id: z.string().optional(),
+  lark_app_secret: z.string().optional(),
   openai_api_key: z.string().optional(),
   anthropic_api_key: z.string().optional(),
 });

@@ -9,11 +9,37 @@ export interface LarkTicket {
   rawFields: Record<string, unknown>;
 }
 
+/**
+ * Exchanges app_id/app_secret for a tenant_access_token, per
+ * https://open.larksuite.com/document/server-docs/getting-started/api-access-token/auth-v3/tenant_access_token_internal
+ * Tokens are valid up to 2h — fetched fresh per CLI invocation rather than cached across runs.
+ */
+export async function getTenantAccessToken(appId: string, appSecret: string): Promise<string> {
+  const response = await fetch('https://open.larksuite.com/open-apis/auth/v3/tenant_access_token/internal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
+  });
+
+  const data = (await response.json()) as {
+    code: number;
+    msg: string;
+    tenant_access_token?: string;
+  };
+
+  if (data.code !== 0 || !data.tenant_access_token) {
+    throw new Error(`Lark auth error ${data.code}: ${data.msg}`);
+  }
+
+  return data.tenant_access_token;
+}
+
 export async function fetchTicket(
   ticketId: string,
   baseId: string,
   tableId: string,
   featureIdField: string,
+  titleField: string,
   token: string,
 ): Promise<LarkTicket> {
   const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records/${ticketId}`;
@@ -51,9 +77,8 @@ export async function fetchTicket(
     ).filter(Boolean);
   }
 
-  const title = typeof fields['Title'] === 'string' ? fields['Title'] :
-    typeof fields['Name'] === 'string' ? fields['Name'] :
-    typeof fields['title'] === 'string' ? fields['title'] : ticketId;
+  const rawTitle = fields[titleField];
+  const title = typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle : ticketId;
 
   const description = typeof fields['Description'] === 'string' ? fields['Description'] :
     typeof fields['description'] === 'string' ? fields['description'] : '';
@@ -69,10 +94,11 @@ export const larkTicketTool = createTool({
     baseId: z.string(),
     tableId: z.string(),
     featureIdField: z.string(),
+    titleField: z.string(),
     token: z.string(),
   }),
-  execute: async ({ ticketId, baseId, tableId, featureIdField, token }) => {
-    const ticket = await fetchTicket(ticketId, baseId, tableId, featureIdField, token);
+  execute: async ({ ticketId, baseId, tableId, featureIdField, titleField, token }) => {
+    const ticket = await fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, token);
     return ticket;
   },
 });

@@ -1,6 +1,7 @@
 # Copy this file to .lv.local.yaml and fill in real credentials.
 # .lv.local.yaml is gitignored — never commit it.
 
-lark_token: t-xxx
+lark_app_id: cli_xxx
+lark_app_secret: xxx
 openai_api_key: sk-xxx
 # anthropic_api_key: sk-ant-xxx  # only needed if using Anthropic models

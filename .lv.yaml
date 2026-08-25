@@ -2,15 +2,19 @@ lark:
   base_id: "xxx"
   table_id: "xxx"
   feature_id_field: "Feature ID" # column name for feature IDs in Lark Base
+  title_field: "Title"           # column name used as the ticket title (branch {summary}, analysis prompt)
 
 default_branch: main
 
-# Branch naming per type — {ticket_id} is the only placeholder. Omit to use
-# the built-in default ({ feature: "lv/{ticket_id}" }). `lv start <id> --type
-# hotfix` picks a type explicitly; default_branch_type is used otherwise.
+# Branch naming per type — {ticket_id} and {summary} are the only placeholders
+# ({summary} is a slug of the ticket title, filled in by `lv start`). Omit to
+# use the built-in default:
+#   { feature: "feature/{ticket_id}-{summary}", hotfix: "hotfix/{ticket_id}-{summary}" }
+# `lv start <id> --type hotfix` picks a type explicitly; default_branch_type is
+# used otherwise.
 # branch_types:
-#   feature: "lv/{ticket_id}"
-#   hotfix: "hotfix/{ticket_id}"
+#   feature: "feature/{ticket_id}-{summary}"
+#   hotfix: "hotfix/{ticket_id}-{summary}"
 # default_branch_type: feature
 
 # Default model — used when no per-step model is declared

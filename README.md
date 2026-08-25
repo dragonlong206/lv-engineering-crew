@@ -41,14 +41,17 @@ lark:
   base_id: "YOUR_BASE_ID"
   table_id: "YOUR_TABLE_ID"
   feature_id_field: "Feature ID"   # column name for feature IDs in Lark Base
+  title_field: "Title"             # column name used as the ticket title (branch {summary}, analysis prompt)
 
 default_branch: main
 
-# Branch naming per type — {ticket_id} is the only placeholder. Omit to use
-# the built-in default ({ feature: "lv/{ticket_id}" }).
+# Branch naming per type — {ticket_id} and {summary} are the only placeholders
+# ({summary} is a slug of the ticket title, filled in by `lv start`). Omit to
+# use the built-in default:
+#   { feature: "feature/{ticket_id}-{summary}", hotfix: "hotfix/{ticket_id}-{summary}" }
 branch_types:
-  feature: "lv/{ticket_id}"
-  hotfix: "hotfix/{ticket_id}"
+  feature: "feature/{ticket_id}-{summary}"
+  hotfix: "hotfix/{ticket_id}-{summary}"
 default_branch_type: feature   # used when `lv start` is run without --type
 
 model: openai/gpt-4o   # default model
@@ -80,7 +83,8 @@ cp .lv.local.yaml.sample .lv.local.yaml
 ```
 
 ```yaml
-lark_token: t-xxx
+lark_app_id: cli_xxx
+lark_app_secret: xxx
 openai_api_key: sk-xxx
 # anthropic_api_key: sk-ant-xxx  # only if using Anthropic models
 ```
@@ -88,11 +92,14 @@ openai_api_key: sk-xxx
 **Option B — env vars**
 
 ```bash
-export LARK_TOKEN=t-xxx
+export LARK_APP_ID=cli_xxx
+export LARK_APP_SECRET=xxx
 export OPENAI_API_KEY=sk-xxx
 ```
 
 Env vars take priority over `.lv.local.yaml`.
+
+`lark_app_id`/`lark_app_secret` come from a custom app on the Lark Open Platform (open.larksuite.com → your app → Credentials & Basic Info), added as a collaborator on the target Base with Bitable read permission. `lv start` exchanges them for a short-lived `tenant_access_token` per request via the [internal tenant access token API](https://open.larksuite.com/document/server-docs/getting-started/api-access-token/auth-v3/tenant_access_token_internal) — no long-lived token to manage or rotate.
 
 ## Doc structure in the target repo
 
@@ -151,13 +158,13 @@ Both modes:
 Start a new ticket.
 
 ```bash
-lv start PROJ-123               # branch name from default_branch_type's pattern, e.g. lv/PROJ-123
-lv start PROJ-123 --type hotfix # branch name from the 'hotfix' pattern, e.g. hotfix/PROJ-123
+lv start PROJ-123               # e.g. feature/PROJ-123-fix-login-bug (title slug from Lark)
+lv start PROJ-123 --type hotfix # e.g. hotfix/PROJ-123-fix-login-bug
 ```
 
 - Fetches the record from Lark Base
 - Validates that the feature ID exists in `docs/features/`
-- Creates the branch (named per `--type`'s pattern in `.lv.yaml`'s `branch_types`, or `default_branch_type` if omitted) from the default branch
+- Creates the branch (named per `--type`'s pattern in `.lv.yaml`'s `branch_types`, or `default_branch_type` if omitted, with `{summary}` filled in from the ticket title) from the default branch
 - Generates `01-analysis.md` with open questions
 - Commits and pushes the branch
 
@@ -207,8 +214,8 @@ lv resume            # uses the current branch
 lv resume PROJ-123   # finds and checks out PROJ-123's branch, whatever type it is
 ```
 
-- Recognizes a branch under any configured type (`lv/PROJ-123`, `hotfix/PROJ-123`, ...), not just the default
-- Given a ticket ID: finds all its branches across every type (local and remote); one match checks it out directly, multiple matches asks you to pick, no matches falls back to the default type's name (same as a fresh `lv start` would use)
+- Recognizes a branch under any configured type (`feature/PROJ-123-...`, `hotfix/PROJ-123-...`, ...), not just the default
+- Given a ticket ID: finds all its branches across every type (local and remote) by ticket ID alone, ignoring the `{summary}` suffix; one match checks it out directly, multiple matches asks you to pick, no matches means the ticket was never started (`lv start` first)
 - Given no ticket ID and the current branch isn't a ticket branch: lists every ticket branch found (any type) and asks which one to resume, instead of just failing
 - Reads `state.yaml` for the ticket and acts on the current step's status:
   - **in progress** (doc generated, may have open questions): shows the doc path and asks `Approve '<step>' now? [y/N]` — `y` runs the same thing as `lv approve`, `n` tells you to run `lv answer`
@@ -227,7 +234,7 @@ lv status
 ```
 Ticket:    PROJ-123
 Features:  checkout-flow
-Branch:    lv/PROJ-123
+Branch:    feature/PROJ-123-checkout-redesign
 Step:      design
 
 Steps:

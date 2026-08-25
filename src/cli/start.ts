@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { loadConfig, getRepoRoot, getChangesDir, getFeatureDir } from '../config.js';
-import { fetchTicket } from '../tools/lark.js';
+import { fetchTicket, getTenantAccessToken } from '../tools/lark.js';
 import { createBranch, commitAll, push } from '../integrations/git/client.js';
 import { writeState } from '../engine/state-io.js';
 import { renderBranchName } from '../engine/branch-naming.js';
@@ -14,7 +14,13 @@ import { getModelForStep } from '../config.js';
 export async function runStart(ticketId: string, opts: { type?: string } = {}): Promise<void> {
   const config = loadConfig();
   const repoRoot = getRepoRoot();
-  const branchName = renderBranchName(config, ticketId, opts.type); // fail fast on an unknown --type
+
+  if (!config.lark_app_id || !config.lark_app_secret) {
+    printError("Missing Lark app credentials. Set 'lark_app_id' and 'lark_app_secret' in .lv.local.yaml (or LARK_APP_ID/LARK_APP_SECRET env vars).");
+    process.exit(1);
+  }
+
+  const larkToken = await getTenantAccessToken(config.lark_app_id, config.lark_app_secret);
 
   printInfo(`Fetching ticket ${ticketId} from Lark Base...`);
   const ticket = await fetchTicket(
@@ -22,8 +28,13 @@ export async function runStart(ticketId: string, opts: { type?: string } = {}): 
     config.lark.base_id,
     config.lark.table_id,
     config.lark.feature_id_field,
-    config.lark_token,
+    config.lark.title_field,
+    larkToken,
   );
+
+  // Branch name embeds the ticket title as a summary slug, so it's rendered
+  // once we have the ticket in hand rather than up front.
+  const branchName = renderBranchName(config, ticketId, { type: opts.type, summary: ticket.title });
 
   if (ticket.featureIds.length === 0) {
     printError(
