@@ -86,6 +86,49 @@ export async function fetchTicket(
   return { id: ticketId, title, description, featureIds, rawFields: fields };
 }
 
+/**
+ * Writes a newly allocated feature ID back onto a ticket's Feature ID field, preserving
+ * whether the field holds a comma-joined string or an array (same shape `fetchTicket` reads)
+ * and appending rather than overwriting any feature IDs already present.
+ *
+ * Throws on failure — callers that want this to be non-fatal (e.g. `lv start`) should catch it.
+ */
+export async function updateTicketFeatureId(
+  ticket: LarkTicket,
+  newFeatureId: string,
+  baseId: string,
+  tableId: string,
+  featureIdField: string,
+  token: string,
+): Promise<void> {
+  const existing = ticket.rawFields[featureIdField];
+  const fields: Record<string, unknown> = {};
+
+  if (Array.isArray(existing)) {
+    fields[featureIdField] = [...existing, newFeatureId];
+  } else {
+    const existingStr = typeof existing === 'string' ? existing.trim() : '';
+    fields[featureIdField] = existingStr ? `${existingStr}, ${newFeatureId}` : newFeatureId;
+  }
+
+  const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records/${ticket.id}`;
+
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({ fields }),
+  });
+
+  const data = (await response.json()) as { code: number; msg?: string };
+
+  if (!response.ok || data.code !== 0) {
+    throw new Error(`Lark update error ${data.code ?? response.status}: ${data.msg ?? 'unknown error'}`);
+  }
+}
+
 export const larkTicketTool = createTool({
   id: 'fetchLarkTicket',
   description: 'Fetch a ticket record from Lark Base',

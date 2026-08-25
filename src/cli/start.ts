@@ -1,13 +1,15 @@
 import fs from 'fs';
 import path from 'path';
 import { loadConfig, getRepoRoot, getChangesDir, getFeatureDir } from '../config.js';
-import { fetchTicket, getTenantAccessToken } from '../tools/lark.js';
+import { fetchTicket, getTenantAccessToken, updateTicketFeatureId } from '../tools/lark.js';
 import { createBranch, commitAll, push } from '../integrations/git/client.js';
 import { writeState } from '../engine/state-io.js';
 import { renderBranchName } from '../engine/branch-naming.js';
+import { allocateFeatureIds } from '../engine/feature-id.js';
+import { generateFeatureDocsFromScan } from './bootstrap.js';
 import { analysisAgent } from '../agents/analysis-agent.js';
 import { buildAnalysisPrompt } from '../prompts.js';
-import { printInfo, printSuccess, printError, writeFile, extractText, extractUsage } from './helpers.js';
+import { printInfo, printSuccess, printError, printWarn, confirm, writeFile, extractText, extractUsage } from './helpers.js';
 import { LV_VERSION } from '../types.js';
 import { getModelForStep } from '../config.js';
 
@@ -36,31 +38,71 @@ export async function runStart(ticketId: string, opts: { type?: string } = {}): 
   // once we have the ticket in hand rather than up front.
   const branchName = renderBranchName(config, ticketId, { type: opts.type, summary: ticket.title });
 
-  if (ticket.featureIds.length === 0) {
-    printError(
-      `Ticket ${ticketId} does not have a '${config.lark.feature_id_field}' field. ` +
-        `Set it in Lark Base before running 'lv start'.`,
-    );
-    process.exit(1);
+  // A ticket with no Feature ID yet is treated as introducing exactly one new feature —
+  // allocate an ID for it now rather than requiring it to be set in Lark first.
+  let featureIds = ticket.featureIds;
+  let newlyAllocatedFeatureId: string | undefined;
+
+  if (featureIds.length === 0) {
+    const [allocated] = allocateFeatureIds(repoRoot, 1, config.feature_id_prefix, config.feature_id_digits);
+    printInfo(`Ticket has no '${config.lark.feature_id_field}' set — allocated new feature ${allocated}.`);
+    featureIds = [allocated];
+    newlyAllocatedFeatureId = allocated;
   }
 
-  // Validate feature directories exist
-  const missingFeatures: string[] = [];
-  const featureDirs: { id: string; path: string }[] = [];
+  const featureDirs: { id: string; path: string }[] = featureIds.map((id) => ({
+    id,
+    path: getFeatureDir(repoRoot, id),
+  }));
+  const missingFeatureIds = featureDirs.filter((f) => !fs.existsSync(f.path)).map((f) => f.id);
 
-  for (const featureId of ticket.featureIds) {
-    const featureDir = getFeatureDir(repoRoot, featureId);
-    if (!fs.existsSync(featureDir)) {
-      missingFeatures.push(featureId);
-    } else {
-      featureDirs.push({ id: featureId, path: featureDir });
+  if (missingFeatureIds.length > 0) {
+    const generated = [];
+    for (const featureId of missingFeatureIds) {
+      printInfo(`Scanning codebase to generate docs for new feature '${featureId}'...`);
+      generated.push(
+        await generateFeatureDocsFromScan(config, repoRoot, featureId, {
+          name: ticket.title,
+          description: ticket.description,
+        }),
+      );
+    }
+
+    console.log(`\nGenerated feature docs (not yet committed):`);
+    for (const docs of generated) {
+      console.log(`  ${docs.overviewPath}`);
+      console.log(`  ${docs.designPath}`);
+      console.log(`  ${docs.requirementsPath}`);
+    }
+
+    const proceed = await confirm(`\nReview the files above. Continue starting ${ticketId}? [y/N] `);
+    if (!proceed) {
+      printInfo(`Stopped. Edit the files above as needed, then re-run 'lv start ${ticketId}' to continue.`);
+      return;
     }
   }
 
-  if (missingFeatures.length > 0) {
-    printError(`Feature directories not found: ${missingFeatures.join(', ')}`);
-    console.error(`Run 'lv bootstrap <feature-id> --paths <paths>' to create them.`);
-    process.exit(1);
+  if (newlyAllocatedFeatureId) {
+    if (config.lark.sync_feature_id) {
+      try {
+        await updateTicketFeatureId(
+          ticket,
+          newlyAllocatedFeatureId,
+          config.lark.base_id,
+          config.lark.table_id,
+          config.lark.feature_id_field,
+          larkToken,
+        );
+        printSuccess(`Synced feature ${newlyAllocatedFeatureId} back to Lark ticket ${ticketId}.`);
+      } catch (err) {
+        printWarn(
+          `Failed to sync feature ${newlyAllocatedFeatureId} back to Lark: ${(err as Error).message}. ` +
+            `Continuing — the allocation is local-only.`,
+        );
+      }
+    } else {
+      printInfo(`Lark sync disabled (lark.sync_feature_id: false) — ${newlyAllocatedFeatureId} is local-only.`);
+    }
   }
 
   printInfo(`Creating branch ${branchName}...`);
@@ -88,7 +130,7 @@ export async function runStart(ticketId: string, opts: { type?: string } = {}): 
   const now = new Date().toISOString();
   writeState(repoRoot, {
     ticket_id: ticketId,
-    feature_ids: ticket.featureIds,
+    feature_ids: featureIds,
     branch: branchName,
     current_step: 'analysis',
     steps: {

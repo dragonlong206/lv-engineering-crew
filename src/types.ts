@@ -33,6 +33,9 @@ export const LarkConfigSchema = z.object({
   table_id: z.string(),
   feature_id_field: z.string().default("Feature ID"),
   title_field: z.string().default("Title"),
+  // Whether `lv start` writes a newly allocated feature ID back to the ticket's
+  // Feature ID field. Requires the app's tenant token to carry Bitable write scope.
+  sync_feature_id: z.boolean().default(true),
 });
 
 export const ModelsConfigSchema = z.object({

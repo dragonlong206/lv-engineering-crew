@@ -3,6 +3,10 @@ lark:
   table_id: "xxx"
   feature_id_field: "Feature ID" # column name for feature IDs in Lark Base
   title_field: "Title"           # column name used as the ticket title (branch {summary}, analysis prompt)
+  # Whether `lv start` writes a feature ID it allocates for a brand-new feature
+  # back to the ticket's Feature ID field above. Requires the app's tenant token
+  # to carry Bitable write scope. Default true; set false to keep allocations local-only.
+  # sync_feature_id: true
 
 default_branch: main
 

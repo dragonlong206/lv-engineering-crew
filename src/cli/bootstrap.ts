@@ -126,12 +126,23 @@ async function runBootstrapFromPaths(
   console.log(`\nReview, edit, then commit manually.`);
 }
 
-async function runBootstrapFromScan(
+export interface GeneratedFeatureDocs {
+  featureDir: string;
+  overviewPath: string;
+  designPath: string;
+  requirementsPath: string;
+}
+
+/**
+ * Core of bootstrap's autonomous-scan mode, without any CLI printing — shared by
+ * `runBootstrapFromScan` (below) and `lv start`'s inline feature bootstrap.
+ */
+export async function generateFeatureDocsFromScan(
   config: Config,
   repoRoot: string,
   featureId: string,
   hint?: BootstrapScanHint,
-): Promise<void> {
+): Promise<GeneratedFeatureDocs> {
   const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
   const overviewPath = path.join(featureDir, "overview.md");
   const designPath = path.join(featureDir, "design.md");
@@ -146,10 +157,6 @@ async function runBootstrapFromScan(
   const existingRequirements = fs.existsSync(requirementsPath)
     ? fs.readFileSync(requirementsPath, "utf-8")
     : undefined;
-
-  printInfo(
-    `Scanning codebase to ${existingOverview ? "refine" : "generate"} docs for feature '${featureId}'...`,
-  );
 
   const model = getModelForStep(config, "bootstrap");
   const prompt = buildBootstrapScanPrompt(
@@ -172,6 +179,27 @@ async function runBootstrapFromScan(
   writeFile(requirementsPath, AUTO_GENERATED_HEADER + parsed.requirementsMarkdown);
 
   updateIndex(repoRoot, featureId);
+
+  return { featureDir, overviewPath, designPath, requirementsPath };
+}
+
+async function runBootstrapFromScan(
+  config: Config,
+  repoRoot: string,
+  featureId: string,
+  hint?: BootstrapScanHint,
+): Promise<void> {
+  const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
+  const alreadyExists = fs.existsSync(path.join(featureDir, "overview.md"));
+
+  printInfo(`Scanning codebase to ${alreadyExists ? "refine" : "generate"} docs for feature '${featureId}'...`);
+
+  const { overviewPath, designPath, requirementsPath } = await generateFeatureDocsFromScan(
+    config,
+    repoRoot,
+    featureId,
+    hint,
+  );
 
   printSuccess(`Generated docs for '${featureId}' from codebase scan.`);
   console.log(`\nFiles written (not committed):`);
