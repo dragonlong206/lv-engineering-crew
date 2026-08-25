@@ -3,6 +3,7 @@ import fs from 'fs';
 import { loadConfig, getRepoRoot, getChangesDir, getFeatureDir } from '../config.js';
 import { readState, writeState } from '../engine/state-io.js';
 import { StateMachine } from '../engine/state-machine.js';
+import { matchBranch } from '../engine/branch-naming.js';
 import { commitAll, currentBranch } from '../integrations/git/client.js';
 import { designAgent } from '../agents/design-agent.js';
 import { buildDesignPrompt } from '../prompts.js';
@@ -15,11 +16,12 @@ export async function runDesign(): Promise<void> {
   const repoRoot = getRepoRoot();
 
   const branch = await currentBranch(repoRoot);
-  if (!branch.startsWith('lv/')) {
-    printError("Not on an lv branch. Run 'lv start <ticket-id>' first.");
+  const matched = matchBranch(config, branch);
+  if (!matched) {
+    printError("Not on a ticket branch. Run 'lv start <ticket-id>' first.");
     process.exit(1);
   }
-  const ticketId = branch.replace('lv/', '');
+  const ticketId = matched.ticketId;
 
   const state = readState(repoRoot, ticketId);
   const machine = new StateMachine(state);

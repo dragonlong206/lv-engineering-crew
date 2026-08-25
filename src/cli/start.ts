@@ -4,15 +4,17 @@ import { loadConfig, getRepoRoot, getChangesDir, getFeatureDir } from '../config
 import { fetchTicket } from '../tools/lark.js';
 import { createBranch, commitAll, push } from '../integrations/git/client.js';
 import { writeState } from '../engine/state-io.js';
+import { renderBranchName } from '../engine/branch-naming.js';
 import { analysisAgent } from '../agents/analysis-agent.js';
 import { buildAnalysisPrompt } from '../prompts.js';
 import { printInfo, printSuccess, printError, writeFile, extractText, extractUsage } from './helpers.js';
 import { LV_VERSION } from '../types.js';
 import { getModelForStep } from '../config.js';
 
-export async function runStart(ticketId: string): Promise<void> {
+export async function runStart(ticketId: string, opts: { type?: string } = {}): Promise<void> {
   const config = loadConfig();
   const repoRoot = getRepoRoot();
+  const branchName = renderBranchName(config, ticketId, opts.type); // fail fast on an unknown --type
 
   printInfo(`Fetching ticket ${ticketId} from Lark Base...`);
   const ticket = await fetchTicket(
@@ -50,7 +52,6 @@ export async function runStart(ticketId: string): Promise<void> {
     process.exit(1);
   }
 
-  const branchName = `lv/${ticketId}`;
   printInfo(`Creating branch ${branchName}...`);
   await createBranch(repoRoot, branchName, config.default_branch);
 

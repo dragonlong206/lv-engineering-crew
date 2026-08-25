@@ -1,7 +1,30 @@
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import readline from 'node:readline/promises';
 import chalk from 'chalk';
+
+export async function confirm(question: string): Promise<boolean> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await rl.question(question);
+  rl.close();
+  return /^y(es)?$/i.test(answer.trim());
+}
+
+export async function promptSelect(question: string, options: string[]): Promise<string> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  console.log(question);
+  options.forEach((opt, i) => console.log(`  ${i + 1}) ${opt}`));
+
+  let choice = NaN;
+  while (!(choice >= 1 && choice <= options.length)) {
+    const answer = await rl.question(`Select 1-${options.length}: `);
+    choice = Number(answer.trim());
+  }
+  rl.close();
+  return options[choice - 1];
+}
+
 export function openEditor(filePath: string): void {
   const editor =
     process.env['EDITOR'] ??

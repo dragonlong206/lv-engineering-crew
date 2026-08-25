@@ -49,6 +49,10 @@ export const ConfigSchema = z.object({
   models: ModelsConfigSchema.optional(),
   feature_id_prefix: z.string().default("F"),
   feature_id_digits: z.number().int().positive().default(4),
+  // Branch naming per type, e.g. { feature: "lv/{ticket_id}", hotfix: "hotfix/{ticket_id}" }.
+  // Omit to use the built-in default (src/engine/branch-naming.ts).
+  branch_types: z.record(z.string(), z.string()).optional(),
+  default_branch_type: z.string().default("feature"),
   // Override which files `lv bootstrap`/`lv init` read from the target repo.
   // Omit either to use the built-in default list (src/tools/codebase.ts).
   scan_extensions: z.array(z.string()).optional(),

@@ -1,18 +1,21 @@
-import { getRepoRoot } from '../config.js';
+import { loadConfig, getRepoRoot } from '../config.js';
 import { readState } from '../engine/state-io.js';
+import { matchBranch } from '../engine/branch-naming.js';
 import { currentBranch } from '../integrations/git/client.js';
 import { printError } from './helpers.js';
 import type { StepRecord } from '../types.js';
 
 export async function runStatus(): Promise<void> {
+  const config = loadConfig();
   const repoRoot = getRepoRoot();
 
   const branch = await currentBranch(repoRoot);
-  if (!branch.startsWith('lv/')) {
-    printError("Not on an lv branch.");
+  const matched = matchBranch(config, branch);
+  if (!matched) {
+    printError("Not on a ticket branch.");
     process.exit(1);
   }
-  const ticketId = branch.replace('lv/', '');
+  const ticketId = matched.ticketId;
 
   const state = readState(repoRoot, ticketId);
 

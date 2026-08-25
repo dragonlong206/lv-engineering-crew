@@ -1,19 +1,22 @@
-import { getRepoRoot } from '../config.js';
+import { loadConfig, getRepoRoot } from '../config.js';
 import { readState, writeState } from '../engine/state-io.js';
 import { StateMachine } from '../engine/state-machine.js';
+import { matchBranch } from '../engine/branch-naming.js';
 import { commitAll, currentBranch } from '../integrations/git/client.js';
 import { printSuccess, printError } from './helpers.js';
 import type { State } from '../types.js';
 
 export async function runApprove(): Promise<void> {
+  const config = loadConfig();
   const repoRoot = getRepoRoot();
 
   const branch = await currentBranch(repoRoot);
-  if (!branch.startsWith('lv/')) {
-    printError("Not on an lv branch. Run 'lv start <ticket-id>' first.");
+  const matched = matchBranch(config, branch);
+  if (!matched) {
+    printError("Not on a ticket branch. Run 'lv start <ticket-id>' first.");
     process.exit(1);
   }
-  const ticketId = branch.replace('lv/', '');
+  const ticketId = matched.ticketId;
 
   const state = readState(repoRoot, ticketId);
   const machine = new StateMachine(state);

@@ -1,14 +1,13 @@
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { LibSQLStore } from '@mastra/libsql';
-import path from 'path';
-import os from 'os';
 import { featureDocsTool } from '../tools/feature-docs.js';
 import { recentChangesTool } from '../tools/recent-changes.js';
 import { docReaderTool } from '../tools/doc-reader.js';
 import { ANALYSIS_AGENT_INSTRUCTIONS } from '../prompts.js';
+import { getLvDbPath } from '../config.js';
 
-const dbPath = path.join(os.homedir(), '.config', 'lv', 'lv.db');
+const dbPath = getLvDbPath();
 
 const memory = new Memory({
   storage: new LibSQLStore({

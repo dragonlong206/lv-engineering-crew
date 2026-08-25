@@ -17,9 +17,10 @@ program
 program
   .command('start <ticket-id>')
   .description('Start a new ticket: fetch from Lark, create branch, generate analysis doc')
-  .action(async (ticketId: string) => {
+  .option('--type <type>', 'Branch type to use (default from .lv.yaml default_branch_type)')
+  .action(async (ticketId: string, opts: { type?: string }) => {
     const { runStart } = await import('./cli/start.js');
-    await runStart(ticketId).catch(die);
+    await runStart(ticketId, opts).catch(die);
   });
 
 program
@@ -65,6 +66,14 @@ program
   .action(async (docs: string[], opts: { idPrefix?: string; idDigits?: string }) => {
     const { runInit } = await import('./cli/init.js');
     await runInit(docs, opts).catch(die);
+  });
+
+program
+  .command('resume [ticket-id]')
+  .description('Resume a ticket: continue the workflow, or ask for approval if waiting on you')
+  .action(async (ticketId?: string) => {
+    const { runResume } = await import('./cli/resume.js');
+    await runResume(ticketId).catch(die);
   });
 
 program

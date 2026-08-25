@@ -18,6 +18,8 @@ lv approve             →  lock design → create MR
 
 `lv init`/`lv bootstrap` populate `docs/features/` and are independent of any ticket — run them once per feature, whenever needed. `lv start` and onward operate per ticket and require every feature it references to already have docs.
 
+Coming back to a ticket later (after a break, or on a different machine)? Run `lv resume [ticket-id]` instead of trying to remember which of `answer`/`approve`/`design` comes next.
+
 ## Installation
 
 Requires: Node.js >= 20
@@ -41,6 +43,13 @@ lark:
   feature_id_field: "Feature ID"   # column name for feature IDs in Lark Base
 
 default_branch: main
+
+# Branch naming per type — {ticket_id} is the only placeholder. Omit to use
+# the built-in default ({ feature: "lv/{ticket_id}" }).
+branch_types:
+  feature: "lv/{ticket_id}"
+  hotfix: "hotfix/{ticket_id}"
+default_branch_type: feature   # used when `lv start` is run without --type
 
 model: openai/gpt-4o   # default model
 
@@ -137,17 +146,18 @@ Both modes:
 - Update `docs/features/INDEX.md`
 - **Do not commit** — engineer reviews and commits manually
 
-### `lv start <ticket-id>`
+### `lv start <ticket-id> [--type <type>]`
 
 Start a new ticket.
 
 ```bash
-lv start PROJ-123
+lv start PROJ-123               # branch name from default_branch_type's pattern, e.g. lv/PROJ-123
+lv start PROJ-123 --type hotfix # branch name from the 'hotfix' pattern, e.g. hotfix/PROJ-123
 ```
 
 - Fetches the record from Lark Base
 - Validates that the feature ID exists in `docs/features/`
-- Creates branch `lv/PROJ-123` from the default branch
+- Creates the branch (named per `--type`'s pattern in `.lv.yaml`'s `branch_types`, or `default_branch_type` if omitted) from the default branch
 - Generates `01-analysis.md` with open questions
 - Commits and pushes the branch
 
@@ -187,6 +197,24 @@ lv design
 - Loads context: feature docs + approved `01-analysis.md`
 - Generates `02-design.md` with open questions
 - Commits the result
+
+### `lv resume [ticket-id]`
+
+Pick a ticket back up — figures out what to do next instead of you having to check `lv status` and remember which command comes next.
+
+```bash
+lv resume            # uses the current branch
+lv resume PROJ-123   # finds and checks out PROJ-123's branch, whatever type it is
+```
+
+- Recognizes a branch under any configured type (`lv/PROJ-123`, `hotfix/PROJ-123`, ...), not just the default
+- Given a ticket ID: finds all its branches across every type (local and remote); one match checks it out directly, multiple matches asks you to pick, no matches falls back to the default type's name (same as a fresh `lv start` would use)
+- Given no ticket ID and the current branch isn't a ticket branch: lists every ticket branch found (any type) and asks which one to resume, instead of just failing
+- Reads `state.yaml` for the ticket and acts on the current step's status:
+  - **in progress** (doc generated, may have open questions): shows the doc path and asks `Approve '<step>' now? [y/N]` — `y` runs the same thing as `lv approve`, `n` tells you to run `lv answer`
+  - **approved, more steps left** (e.g. analysis approved): runs the next step's generation itself (e.g. `lv design`) and stops there for you to review
+  - **approved, last step**: prints that the ticket is fully approved and ready for an MR
+- Never auto-approves — only ever asks
 
 ### `lv status`
 

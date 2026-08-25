@@ -40,6 +40,31 @@ export async function currentBranch(repoRoot: string): Promise<string> {
   return (await git(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot)).trim();
 }
 
+export async function listBranchesMatching(repoRoot: string, globs: string[]): Promise<string[]> {
+  if (globs.length === 0) return [];
+
+  const refArgs = globs.flatMap((glob) => [`refs/heads/${glob}`, `refs/remotes/origin/${glob}`]);
+  const out = await git(['for-each-ref', '--format=%(refname:short)', ...refArgs], repoRoot).catch(() => '');
+
+  const names = out
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((ref) => ref.replace(/^origin\//, ''));
+
+  return Array.from(new Set(names)).sort();
+}
+
+export async function checkoutBranch(repoRoot: string, branchName: string): Promise<void> {
+  try {
+    await git(['checkout', branchName], repoRoot);
+  } catch {
+    // Not available locally — try tracking it from origin (e.g. resuming on a different machine).
+    await git(['fetch', 'origin', branchName], repoRoot);
+    await git(['checkout', '-b', branchName, `origin/${branchName}`], repoRoot);
+  }
+}
+
 export async function getRecentLog(repoRoot: string, dirPath: string, sinceDays: number): Promise<string> {
   const since = new Date();
   since.setDate(since.getDate() - sinceDays);

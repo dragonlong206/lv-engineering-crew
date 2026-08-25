@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import yaml from 'js-yaml';
 import { ConfigSchema, type Config, type Step } from './types.js';
 
@@ -68,4 +69,11 @@ export function getFeatureDir(repoRoot: string, featureId: string): string {
 
 export function getModelForStep(config: Config, step: Step | 'bootstrap' | 'init'): string {
   return config.models?.[step] ?? config.model;
+}
+
+/** Path to the shared Mastra/LibSQL db file, creating its parent dir if needed. */
+export function getLvDbPath(): string {
+  const dbPath = path.join(os.homedir(), '.config', 'lv', 'lv.db');
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  return dbPath;
 }

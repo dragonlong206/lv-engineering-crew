@@ -2,22 +2,23 @@ import path from 'path';
 import { loadConfig, getRepoRoot, getChangesDir } from '../config.js';
 import { readState, writeState } from '../engine/state-io.js';
 import { StateMachine } from '../engine/state-machine.js';
+import { matchBranch } from '../engine/branch-naming.js';
 import { commitAll } from '../integrations/git/client.js';
 import { analysisAgent } from '../agents/analysis-agent.js';
 import { designAgent } from '../agents/design-agent.js';
 import { buildAnalysisUpdatePrompt, buildDesignUpdatePrompt } from '../prompts.js';
 import { printInfo, printSuccess, printError, openEditor, writeFile, extractText, extractUsage } from './helpers.js';
 import { getModelForStep } from '../config.js';
-import type { State } from '../types.js';
+import type { Config, State } from '../types.js';
 
 export async function runAnswer(): Promise<void> {
   const config = loadConfig();
   const repoRoot = getRepoRoot();
 
   // Find the current ticket from branch name
-  const ticketId = await getCurrentTicketId(repoRoot);
+  const ticketId = await getCurrentTicketId(config, repoRoot);
   if (!ticketId) {
-    printError("Not on an lv branch. Run 'lv start <ticket-id>' first.");
+    printError("Not on a ticket branch. Run 'lv start <ticket-id>' first.");
     process.exit(1);
   }
 
@@ -90,9 +91,8 @@ export async function runAnswer(): Promise<void> {
   console.log(`\nReview ${path.basename(docFile)} and run 'lv answer' again or 'lv approve'.`);
 }
 
-async function getCurrentTicketId(repoRoot: string): Promise<string | null> {
+async function getCurrentTicketId(config: Config, repoRoot: string): Promise<string | null> {
   const { currentBranch } = await import('../integrations/git/client.js');
   const branch = await currentBranch(repoRoot);
-  if (!branch.startsWith('lv/')) return null;
-  return branch.replace('lv/', '');
+  return matchBranch(config, branch)?.ticketId ?? null;
 }
