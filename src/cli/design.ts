@@ -6,8 +6,8 @@ import { StateMachine } from '../engine/state-machine.js';
 import { matchBranch } from '../engine/branch-naming.js';
 import { commitAll, currentBranch } from '../integrations/git/client.js';
 import { designAgent } from '../agents/design-agent.js';
-import { buildDesignPrompt } from '../prompts.js';
-import { printInfo, printSuccess, printError, writeFile, extractText, extractUsage } from './helpers.js';
+import { buildDesignPrompt, type DesignOutput } from '../prompts.js';
+import { printInfo, printSuccess, printError, writeFile, extractText, extractJson, extractUsage } from './helpers.js';
 import { getModelForStep } from '../config.js';
 import type { State } from '../types.js';
 
@@ -41,8 +41,10 @@ export async function runDesign(): Promise<void> {
   }
 
   const changesDir = getChangesDir(repoRoot, ticketId);
-  const analysisFile = path.join(changesDir, '01-analysis.md');
-  const designFile = path.join(changesDir, '02-plan.md');
+  const analysisFile = path.join(changesDir, '1.proposal.md');
+  const designFile = path.join(changesDir, '3.design.md');
+  const tasksFile = path.join(changesDir, '5.tasks.md');
+  const specsDir = path.join(changesDir, '2.specs');
 
   printInfo('Generating design document...');
   const prompt = buildDesignPrompt(ticketId, analysisFile, featureDirs, repoRoot);
@@ -56,10 +58,14 @@ export async function runDesign(): Promise<void> {
   });
   const durationSeconds = (Date.now() - startTime) / 1000;
 
-  const designContent = extractText(result);
+  const parsed = extractJson<DesignOutput>(extractText(result));
   const usage = extractUsage(result);
 
-  writeFile(designFile, designContent);
+  writeFile(designFile, parsed.designMarkdown);
+  writeFile(tasksFile, parsed.tasksMarkdown);
+  for (const [featureId, markdown] of Object.entries(parsed.specDeltas)) {
+    writeFile(path.join(specsDir, `${featureId}.md`), markdown);
+  }
 
   const advancedState = machine.advance();
   const updatedState: State = {
@@ -81,6 +87,10 @@ export async function runDesign(): Promise<void> {
   await commitAll(repoRoot, `lv: design ${ticketId} — draft`);
 
   printSuccess(`Implementation plan generated.`);
-  console.log(`\nPlan: ${designFile}`);
-  console.log(`\nReview the document and answer the questions, then run 'lv answer'.`);
+  console.log(`\nDesign: ${designFile}`);
+  console.log(`Tasks: ${tasksFile}`);
+  if (Object.keys(parsed.specDeltas).length > 0) {
+    console.log(`Spec deltas: ${specsDir}`);
+  }
+  console.log(`\nReview the documents and answer the questions, then run 'lv answer'.`);
 }

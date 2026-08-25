@@ -12,6 +12,7 @@ import {
   AUTO_GENERATED_HEADER,
   buildBootstrapOverviewPrompt,
   buildBootstrapDesignPrompt,
+  buildBootstrapRequirementsPrompt,
   buildBootstrapScanPrompt,
 } from "../prompts.js";
 import { listCodeFiles } from "../tools/codebase.js";
@@ -95,13 +96,15 @@ async function runBootstrapFromPaths(
 
   const model = getModelForStep(config, "bootstrap");
 
-  const [overviewResult, designResult] = await Promise.all([
+  const [overviewResult, designResult, requirementsResult] = await Promise.all([
     bootstrapAgent.generate(buildBootstrapOverviewPrompt(featureId, codeBlock), { model }),
     bootstrapAgent.generate(buildBootstrapDesignPrompt(featureId, codeBlock), { model }),
+    bootstrapAgent.generate(buildBootstrapRequirementsPrompt(featureId, codeBlock), { model }),
   ]);
 
   const overviewText = extractText(overviewResult);
   const designText = extractText(designResult);
+  const requirementsText = extractText(requirementsResult);
 
   const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
   fs.mkdirSync(featureDir, { recursive: true });
@@ -111,6 +114,7 @@ async function runBootstrapFromPaths(
     AUTO_GENERATED_HEADER + overviewText,
   );
   writeFile(path.join(featureDir, "design.md"), AUTO_GENERATED_HEADER + designText);
+  writeFile(path.join(featureDir, "requirements.md"), AUTO_GENERATED_HEADER + requirementsText);
 
   updateIndex(repoRoot, featureId);
 
@@ -118,6 +122,7 @@ async function runBootstrapFromPaths(
   console.log(`\nFiles written (not committed):`);
   console.log(`  ${path.join(featureDir, "overview.md")}`);
   console.log(`  ${path.join(featureDir, "design.md")}`);
+  console.log(`  ${path.join(featureDir, "requirements.md")}`);
   console.log(`\nReview, edit, then commit manually.`);
 }
 
@@ -130,12 +135,16 @@ async function runBootstrapFromScan(
   const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
   const overviewPath = path.join(featureDir, "overview.md");
   const designPath = path.join(featureDir, "design.md");
+  const requirementsPath = path.join(featureDir, "requirements.md");
 
   const existingOverview = fs.existsSync(overviewPath)
     ? fs.readFileSync(overviewPath, "utf-8")
     : undefined;
   const existingDesign = fs.existsSync(designPath)
     ? fs.readFileSync(designPath, "utf-8")
+    : undefined;
+  const existingRequirements = fs.existsSync(requirementsPath)
+    ? fs.readFileSync(requirementsPath, "utf-8")
     : undefined;
 
   printInfo(
@@ -150,15 +159,17 @@ async function runBootstrapFromScan(
     existingDesign,
     hint?.name,
     hint?.description,
+    existingRequirements,
   );
   const scanAgent = createBootstrapScanAgent(config.scan_extensions, config.scan_skip_dirs);
   const result = await scanAgent.generate(prompt, { model, maxSteps: 18 });
   const text = extractText(result);
-  const parsed = extractJson<{ overviewMarkdown: string; designMarkdown: string }>(text);
+  const parsed = extractJson<{ overviewMarkdown: string; designMarkdown: string; requirementsMarkdown: string }>(text);
 
   fs.mkdirSync(featureDir, { recursive: true });
   writeFile(overviewPath, AUTO_GENERATED_HEADER + parsed.overviewMarkdown);
   writeFile(designPath, AUTO_GENERATED_HEADER + parsed.designMarkdown);
+  writeFile(requirementsPath, AUTO_GENERATED_HEADER + parsed.requirementsMarkdown);
 
   updateIndex(repoRoot, featureId);
 
@@ -166,6 +177,7 @@ async function runBootstrapFromScan(
   console.log(`\nFiles written (not committed):`);
   console.log(`  ${overviewPath}`);
   console.log(`  ${designPath}`);
+  console.log(`  ${requirementsPath}`);
   console.log(`\nReview, edit, then commit manually.`);
 }
 

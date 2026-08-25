@@ -50,7 +50,38 @@ export function extractText(result: { text: string }): string {
 export function extractJson<T>(text: string): T {
   const trimmed = text.trim();
   const fenceMatch = trimmed.match(/^```(?:json|markdown)?\s*([\s\S]*?)\s*```$/);
-  const jsonStr = fenceMatch ? fenceMatch[1] : trimmed;
+  const candidate = fenceMatch ? fenceMatch[1] : trimmed;
+
+  // Models occasionally append stray characters (e.g. an extra closing brace) after an
+  // otherwise-valid JSON object. Parse only the balanced top-level {...} region instead of
+  // trusting the whole string, so trailing garbage doesn't break JSON.parse.
+  const start = candidate.indexOf('{');
+  if (start === -1) return JSON.parse(candidate) as T;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let end = -1;
+  for (let i = start; i < candidate.length; i++) {
+    const ch = candidate[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+
+  const jsonStr = end !== -1 ? candidate.slice(start, end + 1) : candidate;
   return JSON.parse(jsonStr) as T;
 }
 

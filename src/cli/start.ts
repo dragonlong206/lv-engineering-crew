@@ -82,7 +82,7 @@ export async function runStart(ticketId: string, opts: { type?: string } = {}): 
   const usage = extractUsage(result);
 
   const changesDir = getChangesDir(repoRoot, ticketId);
-  const analysisFile = path.join(changesDir, '01-analysis.md');
+  const analysisFile = path.join(changesDir, '1.proposal.md');
   writeFile(analysisFile, analysisContent);
 
   const now = new Date().toISOString();

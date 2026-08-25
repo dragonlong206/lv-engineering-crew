@@ -3,34 +3,34 @@
 # Overview of the 'lv-bootstrap' Feature
 
 ## Purpose of the Feature
-`lv-bootstrap` generates feature documentation from code. It supports two modes: a path-based mode that reads one or more user-supplied files or directories, and an autonomous scan mode that explores the repository with tools to refine or create existing feature docs.
+`lv-bootstrap` generates feature documentation from code. It supports two modes: a path-based mode that reads one or more user-supplied files or directories, and an autonomous scan mode that explores the repository and refines existing draft docs when they are present.
 
 ## Main Components
-- **CLI command**: `bootstrap <feature-id>` is registered in `src/index.ts` and described as generating feature docs from code.
-- **Bootstrap runner**: `runBootstrap()` in `src/cli/bootstrap.ts` routes to either path-based generation or autonomous scan mode.
-- **Document generation agent**: `bootstrapAgent` in `src/cli/bootstrap.ts` is a Mastra `Agent` with id `lv-bootstrap-agent` used for path-based prompt generation.
-- **Autonomous scan agent**: `bootstrapScanAgent` in `src/agents/bootstrap-agent.ts` is a Mastra `Agent` with id `lv-bootstrap-scan-agent` and file, search, and list tools attached.
-- **Codebase helpers**: `listCodeFiles()` in `src/tools/codebase.ts` recursively finds source and doc files while skipping excluded directories.
-- **Configuration and path helpers**: `loadConfig()`, `getRepoRoot()`, and `getFeaturesDir()` in `src/config.ts` locate the repo and feature output directory.
-- **Index updater**: `updateIndex()` in `src/cli/bootstrap.ts` appends the feature to `docs/features/INDEX.md` if needed.
+- **CLI command**: `bootstrap <feature-id>` is registered in `src/index.ts`.
+- **Bootstrap runner**: `runBootstrap()` in `src/cli/bootstrap.ts` selects path-based generation or autonomous scan mode.
+- **Path-based doc generator**: `bootstrapAgent` in `src/cli/bootstrap.ts` generates Markdown from a supplied code context.
+- **Autonomous scan agent**: `createBootstrapScanAgent()` in `src/agents/bootstrap-agent.ts` returns a Mastra `Agent` with `listFiles`, `readFile`, and `searchCode` tools.
+- **Codebase tools**: `buildCodebaseTools()` and `listCodeFiles()` in `src/tools/codebase.ts` provide file discovery, file reading, and search support.
+- **Configuration helpers**: `loadConfig()`, `getRepoRoot()`, `getFeaturesDir()`, and `getModelForStep()` in `src/config.ts` locate the repo and resolve the model to use.
+- **Index updater**: `updateIndex()` in `src/cli/bootstrap.ts` keeps `docs/features/INDEX.md` in sync.
 
 ## High-Level Flow
-1. The user runs `lv bootstrap <feature-id>` with either `--paths` or no paths at all.
+1. The user runs `lv bootstrap <feature-id>` with either `--paths` or no paths.
 2. If `--paths` is provided, `runBootstrapFromPaths()` validates each path, reads file contents, and builds a Markdown code context grouped by relative file path.
-3. For directory inputs, the code reads at most 50 files per directory via `listCodeFiles(absDir).slice(0, 50)`.
-4. The path-based flow sends the assembled code block to `bootstrapAgent.generate()` twice in parallel, once for `overview.md` and once for `design.md`.
-5. If `--paths` is omitted, `runBootstrapFromScan()` reads any existing `overview.md` and `design.md`, builds a scan prompt, and calls `bootstrapScanAgent.generate()` with `maxSteps: 18`.
-6. The scan result is parsed as JSON with `overviewMarkdown` and `designMarkdown`, then written to the feature directory with an auto-generated header.
+3. For directory inputs, the code recursively collects matching files and limits each directory to 50 files.
+4. The path-based flow sends the assembled code block to the bootstrap agent to generate `overview.md`, `design.md`, and `requirements.md`.
+5. If `--paths` is omitted, `runBootstrapFromScan()` reads any existing `overview.md`, `design.md`, and `requirements.md`, builds a scan prompt, and calls the scan agent with `maxSteps: 18`.
+6. The scan result is parsed as JSON with `overviewMarkdown`, `designMarkdown`, and `requirementsMarkdown`, then written to the feature directory with an auto-generated header.
 7. In both modes, the command creates the feature directory if needed and updates `docs/features/INDEX.md`.
 
 ## Constraints and Assumptions
 - The command must run from inside a repo containing `.lv.yaml`, because `loadConfig()` and `getRepoRoot()` search upward for that file.
 - Path-based mode accepts a comma-separated `--paths` value, and each entry may be either absolute or relative to the repo root.
-- If `--paths` is present, any `--name` or `--description` hint is ignored with a warning.
-- Recursive file collection skips `node_modules`, `.git`, `dist`, `__pycache__`, and `.venv`.
-- `listCodeFiles()` only includes files with extensions `.ts`, `.js`, `.py`, `.go`, `.java`, `.rb`, `.rs`, `.md`, `.yaml`, `.yml`, and `.json`.
+- If `--paths` is provided, any `--name` or `--description` hint is ignored with a warning.
+- Recursive file collection skips common build and dependency directories, including `node_modules`, `.git`, `dist`, `build`, `out`, `__pycache__`, `.venv`, and several language-specific build folders.
+- `listCodeFiles()` matches a broad set of source and document extensions, not just code files.
 - The autonomous scan mode expects the agent to return strict JSON, not free-form Markdown.
 - Generated docs are intentionally marked as auto-generated and are meant for manual review before commit.
 
 ## Current State of the Code
-`lv-bootstrap` is implemented and wired into the CLI. Both generation modes are present, feature docs are written to `docs/features/<feature-id>/overview.md` and `design.md`, and the feature index is maintained automatically. The code also supports refinement of existing docs in autonomous scan mode by feeding prior content back into the agent prompt.
+`lv-bootstrap` is implemented and wired into the CLI. Both generation modes are present, feature docs are written to `docs/features/<feature-id>/overview.md`, `design.md`, and `requirements.md`, and the feature index is updated automatically. The autonomous scan mode also feeds any existing draft docs back into the agent prompt so they can be refined rather than replaced blindly.

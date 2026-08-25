@@ -49,12 +49,12 @@ Seven steps; each step must be approved before the next one runs.
 
 | Step | Content                                                          | Output                     | Who approves  |
 | ---- | ----------------------------------------------------------------- | --------------------------- | ------------- |
-| 1    | Analyze requirements from the ticket, ask clarifying questions   | `01-analysis.md`            | Engineer      |
-| 2    | Engineer answers, agent updates, repeat until finalized          | `01-analysis.md` final version | Engineer   |
-| 3    | Design the solution                                                | `02-design.md`               | Engineer      |
+| 1    | Analyze requirements from the ticket, ask clarifying questions   | `1.proposal.md`            | Engineer      |
+| 2    | Engineer answers, agent updates, repeat until finalized          | `1.proposal.md` final version | Engineer   |
+| 3    | Design the solution                                                | `3.design.md`, `5.tasks.md`, `2.specs/*.md` | Engineer      |
 | 4    | Implement the code                                                 | Code on branch               | Engineer      |
-| 5    | Review code, update feature documentation, create merge request  | Diff + docs update            | Tech lead     |
-| 6    | Design test scenarios, test cases, generate automation script    | `03-test-plan.md` + script    | Test engineer |
+| 5    | Review code, update feature documentation, create merge request  | Diff + docs update (reconciled via `lv archive-change-docs`) | Tech lead     |
+| 6    | Design test scenarios, test cases, generate automation script    | `4.test-plan.md` + script    | Test engineer |
 | 7    | Run automation tests, report results                               | Test report                   | Passing result |
 
 If step 7 fails, go back to step 4. A failing test means either the code or the test is wrong — fix the implementation and review again from the start.
@@ -83,14 +83,22 @@ docs/
     <feature-id>/
       overview.md               # living document, reflects current state
       design.md                 # architecture, data model, API contract
+      requirements.md           # structured Requirement/Scenario source of truth (see 4.2a)
       history.md                # index of changes that touched this feature
   changes/
     <ticket-id>/
-      01-analysis.md
-      02-design.md
-      03-test-plan.md
+      1.proposal.md              # why/what/scope, open questions (analysis step)
+      2.specs/                    # delta requirements, one file per touched feature
+        <feature-id>.md
+      3.design.md                 # approach, data model, API changes, testing (design step)
+      4.test-plan.md               # test scenarios/cases proving the change works (step 6)
+      5.tasks.md                    # implementation checklist (design step)
       state.yaml
 ```
+
+Numeric prefixes on the change-folder files reflect the order the flow produces/reconciles
+them: proposal, then specs deltas, then design, then test plan, then tasks. `state.yaml` stays
+unprefixed since it's metadata, not a flow artifact.
 
 ### 4.2 Feature documentation
 
@@ -100,12 +108,32 @@ Requirements:
 
 - Always reflects the current state of the code, not history
 - Updated at step 5, once the code diff exists. Not updated at step 1 or 3, since at that point it isn't yet known exactly how the feature will change
-- The agent **may only make deliberate edits**: add a section, remove a section, edit a section. Never rewrite the whole file
+- For `overview.md`/`design.md` (prose, not requirement-keyed), the agent **may only make deliberate edits**: add a section, remove a section, edit a section. Never rewrite the whole file
+- For `requirements.md`, reconciling a change's delta is a **mechanical merge** instead (see 4.2a): ADDED requirements are appended, MODIFIED requirements replace the matched header's block, REMOVED requirements are deleted by matched header. No freeform rewriting there either, but the mechanism is header-matching rather than agent judgment
 - The documentation update lives in the same merge request as the code, approved at the same time
 
-The reason for the section-only-edit rule: with multiple tickets running in parallel on the same feature, rewriting the whole file causes markdown merge conflicts and produces a diff so large that reviewers rubber-stamp it without reading. The second problem is more dangerous, because it silently degrades the quality of context for later tickets.
+The reason for the section-only-edit / mechanical-merge rule: with multiple tickets running in parallel on the same feature, rewriting the whole file causes markdown merge conflicts and produces a diff so large that reviewers rubber-stamp it without reading. The second problem is more dangerous, because it silently degrades the quality of context for later tickets.
 
 When `overview.md` exceeds roughly 400 lines, split the content into sub-files in the same directory and turn `overview.md` into an index.
+
+### 4.2a Requirement/scenario format
+
+`requirements.md` and change delta files (`docs/changes/<ticket-id>/2.specs/<feature-id>.md`)
+share one convention, borrowed from [OpenSpec](https://github.com/Fission-AI/OpenSpec):
+
+- `requirements.md` holds `### Requirement: <Name>` blocks. Name is descriptive, under ~50
+  characters, and unique within the file after trimming whitespace (case-sensitive match). Each
+  requirement opens with a SHALL statement describing the core behavior
+- Under each requirement, one or more `#### Scenario: <situation>` blocks give concrete,
+  testable examples as bullets: `**WHEN**` (trigger), `**THEN**` (outcome), optional
+  `**GIVEN**` (initial state) and `**AND**` (additional condition/outcome)
+- `requirements.md` states externally observable behavior only — inputs, outputs, constraints.
+  Implementation detail (library choices, function/class structure, execution mechanics) stays
+  in `design.md`, keeping the existing "what" (`requirements.md`) vs "how" (`design.md`) split
+- A change's `docs/changes/<ticket-id>/2.specs/<feature-id>.md` delta file proposes edits
+  against a feature's `requirements.md` using `## ADDED Requirements` / `## MODIFIED
+  Requirements` / `## REMOVED Requirements` sections, matching requirement headers verbatim
+  against the target file
 
 ### 4.3 Change documentation
 
@@ -116,6 +144,9 @@ Requirements:
 - Each ticket gets its own directory under `docs/changes/<ticket-id>/`
 - Stored on branch `lv/<ticket-id>`, merged into the main branch together with the code
 - Not edited after merging. Any change means a new ticket
+- A ticket's `2.specs/<feature-id>.md` delta is *proposed* at step 3 (design), alongside
+  `3.design.md`/`5.tasks.md`, but not *reconciled* into the feature's `requirements.md` until
+  step 5 once the code diff exists — same timing rule as `overview.md`/`design.md`
 
 ### 4.4 Feature granularity
 
@@ -223,8 +254,15 @@ LV is a CLI tool that runs locally.
 | `lv approve`                                   | Finalize the current step, move to the next one        |
 | `lv next`                                      | Run the next step according to state                   |
 | `lv status`                                    | View the current status                                |
+| `lv archive-change-docs <ticket-id>`           | Mechanically merge the ticket's `2.specs/*.md` deltas into each affected feature's `requirements.md` (ADDED → append, MODIFIED → replace matched header, REMOVED → delete matched header). Not yet implemented — noted here for step 5 (see §10) |
 
 `approve` is deliberately separate from `next`. Finalizing a step must be an explicit action by the engineer, not a side effect of moving forward.
+
+`archive-change-docs` is named deliberately unlike OpenSpec's `archive`: it reconciles
+*content* into `requirements.md` only. It does not move or rename
+`docs/changes/<ticket-id>/` — that directory stays exactly where it is, per the "not edited
+after merging" rule in §4.3. It also covers only the doc-reconciliation slice of step 5;
+code review and merge-request creation stay manual/GitLab-side.
 
 ---
 
@@ -262,9 +300,14 @@ Documentation generated by the agent is read by engineers every day, so:
 
 The goal is to validate the documentation structure and context quality, not to save time.
 
-Scope: read tickets from Lark Base, generate and update `01-analysis.md` and `02-design.md`, bootstrap feature documentation, manage state in git, local git operations.
+Scope: read tickets from Lark Base, generate and update `1.proposal.md` and `3.design.md`/`5.tasks.md`/`2.specs/*.md`, bootstrap feature documentation, manage state in git, local git operations.
 
 Out of scope for this phase: GitLab API integration (the engineer creates the merge request manually), writing status back to Lark Base, per-step model configuration, sanity checks between ticket and feature.
+
+Phase 1 code covers *proposing* requirement deltas during `lv design` (writing
+`2.specs/<feature-id>.md`) and generating the initial `requirements.md` via bootstrap/init. It
+does not cover *reconciling* those deltas — that's `lv archive-change-docs` (§8), step-5 work
+for a later phase, not implemented yet.
 
 ### Phase 2: steps 4 and 5
 
@@ -282,7 +325,7 @@ Testing. Left for last because it depends heavily on environment, CI, and test d
 
 **Is the design document LV writes good enough for a different developer to implement without having to ask the ticket author again?**
 
-How to test: after `02-design.md` is finalized, hand it to a developer who wasn't involved in that ticket and have them implement it. Count how many times they have to come back and ask.
+How to test: after `3.design.md` is finalized, hand it to a developer who wasn't involved in that ticket and have them implement it. Count how many times they have to come back and ask.
 
 - 0 to 1: the documentation is good enough to automate step 4
 - 3 or more: the design template or context loader needs fixing before doing anything else
@@ -304,7 +347,7 @@ After about 10 tickets, if the number of iterations isn't trending down, the cau
 
 | Risk                                                     | Impact | Mitigation                                                                                             |
 | ----------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------- |
-| Feature documentation grows too large, loses its usefulness as context | High   | Enforce section-only edits, split files past the threshold, measure tokens loaded                        |
+| Feature documentation grows too large, loses its usefulness as context | High   | For `requirements.md`, delta specs make reconciliation a small mechanical merge instead of a full rewrite (§4.2a); for `overview.md`/`design.md`, enforce section-only edits, split files past the threshold, measure tokens loaded |
 | Engineer rubber-stamps because the diff is too large       | High   | Limit documentation diff size, warn in CI past the threshold                                              |
 | Token cost exceeds expectations                             | Medium | Log tokens from the start, optimize the context loader based on real data                                  |
 | Team feels like it's extra work                             | Medium | Be upfront from the start: you're not writing more documentation, but you do have to read and edit more. In exchange, later tickets come with context already in place |
@@ -320,3 +363,4 @@ After about 10 tickets, if the number of iterations isn't trending down, the cau
 - Default branch of the target repo
 - How to handle two tickets editing the same section of `overview.md`
 - Specific threshold for CI to warn about an overly large documentation diff
+- Format for resolving two changes that propose conflicting deltas to the same requirement header before either is reconciled (OpenSpec doesn't fully solve this either)
