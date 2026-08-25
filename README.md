@@ -5,6 +5,9 @@ CLI tool for spec-driven development with human-in-the-loop. Automates the requi
 ## Workflow (phase 1)
 
 ```
+lv init <doc-paths...>   →  split requirement docs into features, allocate Fxxxx IDs, draft overview.md
+lv bootstrap <feature-id> →  ground a feature's docs in the actual code (overview.md + design.md)
+
 lv start <ticket-id>   →  generate 01-analysis.md + open questions
 lv answer              →  engineer answers, agent updates doc
 lv approve             →  lock analysis
@@ -12,6 +15,8 @@ lv design              →  generate 02-design.md + open questions
 lv answer              →  engineer answers, agent updates doc
 lv approve             →  lock design → create MR
 ```
+
+`lv init`/`lv bootstrap` populate `docs/features/` and are independent of any ticket — run them once per feature, whenever needed. `lv start` and onward operate per ticket and require every feature it references to already have docs.
 
 ## Installation
 
@@ -43,6 +48,10 @@ models:                # per-step model — omit to use the default
   analysis: openai/gpt-4o
   design: openai/gpt-4o
   bootstrap: openai/gpt-4o-mini
+  init: openai/gpt-4o-mini
+
+feature_id_prefix: "F"   # used by `lv init` to allocate feature IDs (e.g. F0001)
+feature_id_digits: 4
 ```
 
 ### 2. Credentials
@@ -87,18 +96,39 @@ docs/
 
 ## Commands
 
-### `lv bootstrap <feature-id> --paths <paths>`
+### `lv init <doc-paths...>`
 
-Generate initial docs for a feature that has no docs yet, from existing code.
+Analyze requirement documents (BRD/SRD/SSD, UI design/prototype references) and split them into features.
 
 ```bash
-lv bootstrap checkout-flow --paths src/checkout,src/cart
+lv init docs/requirements/checkout-brd.pdf docs/requirements/checkout-srd.md
+lv init requirements.md https://figma.com/file/xxx   # a URL is recorded as an unfetched reference
 ```
 
-- Reads code at the specified paths
-- Generates `overview.md` and `design.md` with an "AUTO-GENERATED" header
-- Updates `docs/features/INDEX.md`
+- Accepts `.md`, `.txt`, `.pdf`, `.docx`, `.html`/`.htm`, or a URL (not fetched, cited as a reference)
+- Splits the combined input into distinct features and allocates a fresh `Fxxxx` ID per feature (`--id-prefix`/`--id-digits` override `.lv.yaml`'s defaults for one run)
+- Writes a requirements-derived draft `docs/features/<id>/overview.md` per feature (purpose, scope, constraints, source references — no code involved yet) and updates `docs/features/INDEX.md`
 - **Does not commit** — engineer reviews and commits manually
+- Next step: `lv bootstrap <feature-id>` for each new ID, to ground the draft in code
+
+### `lv bootstrap <feature-id> [--paths <paths>] [--name <name>] [--description <description>]`
+
+Generate or refine a feature's docs from the actual code.
+
+```bash
+lv bootstrap checkout-flow --paths src/checkout,src/cart      # explicit paths — reads and summarizes exactly those files
+lv bootstrap F0001                                             # no --paths — agent explores the repo itself
+lv bootstrap F0002 --name "Order refunds" --description "Lets support agents issue partial/full refunds from the order detail page"
+```
+
+Two modes:
+- **`--paths` given**: reads code at the specified paths and generates `overview.md`/`design.md` from that content directly (fast, deterministic, no repo exploration).
+- **`--paths` omitted**: an agent autonomously explores the repository (list/read/search tools, similar to how Claude Code explores a codebase) to ground the docs in what it actually finds. If `docs/features/<feature-id>/overview.md`/`design.md` already exist (e.g. drafted by `lv init`), it **refines** them — re-verifying any code-related claims against fresh exploration rather than trusting the draft — instead of overwriting from scratch. `--name`/`--description` seed the exploration with a starting hint when there's no existing draft to work from (ignored, with a warning, if `--paths` is also given).
+
+Both modes:
+- Generate `overview.md` and `design.md` with an "AUTO-GENERATED" header
+- Update `docs/features/INDEX.md`
+- **Do not commit** — engineer reviews and commits manually
 
 ### `lv start <ticket-id>`
 
@@ -176,7 +206,7 @@ The Lark Base record must have:
 - A value in the Feature ID column (column name declared in `.lv.yaml`)
 - A Feature ID that points to an existing directory in `docs/features/`
 
-If the feature has no docs yet, run `lv bootstrap` first.
+If the feature has no docs yet, run `lv init` (from requirement docs) or `lv bootstrap` (from existing code) first.
 
 ## Tracing
 
