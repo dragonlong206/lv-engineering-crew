@@ -11,7 +11,7 @@ lv bootstrap <feature-id> →  ground a feature's docs in the actual code (overv
 lv start <ticket-id>   →  generate 01-analysis.md + open questions
 lv answer              →  engineer answers, agent updates doc
 lv approve             →  lock analysis
-lv design              →  generate 02-design.md + open questions
+lv design              →  generate 02-plan.md + open questions
 lv answer              →  engineer answers, agent updates doc
 lv approve             →  lock design → create MR
 ```
@@ -113,7 +113,7 @@ docs/
   changes/
     <ticket-id>/
       01-analysis.md              # requirement analysis document
-      02-design.md                # technical design document
+      02-plan.md                  # implementation plan document
       state.yaml                  # workflow state (single source of truth)
 ```
 
@@ -195,14 +195,14 @@ lv approve
 
 ### `lv design`
 
-Generate the technical design document. Only runs after analysis has been approved.
+Generate the implementation plan document. Only runs after analysis has been approved.
 
 ```bash
 lv design
 ```
 
 - Loads context: feature docs + approved `01-analysis.md`
-- Generates `02-design.md` with open questions
+- Generates `02-plan.md`, sized to the ticket (terse for a minor fix/bug, fuller for a feature), with open questions
 - Commits the result
 
 ### `lv resume [ticket-id]`

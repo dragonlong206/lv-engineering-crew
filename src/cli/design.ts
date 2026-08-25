@@ -42,7 +42,7 @@ export async function runDesign(): Promise<void> {
 
   const changesDir = getChangesDir(repoRoot, ticketId);
   const analysisFile = path.join(changesDir, '01-analysis.md');
-  const designFile = path.join(changesDir, '02-design.md');
+  const designFile = path.join(changesDir, '02-plan.md');
 
   printInfo('Generating design document...');
   const prompt = buildDesignPrompt(ticketId, analysisFile, featureDirs, repoRoot);
@@ -80,7 +80,7 @@ export async function runDesign(): Promise<void> {
   writeState(repoRoot, updatedState);
   await commitAll(repoRoot, `lv: design ${ticketId} — draft`);
 
-  printSuccess(`Design document generated.`);
-  console.log(`\nDesign: ${designFile}`);
+  printSuccess(`Implementation plan generated.`);
+  console.log(`\nPlan: ${designFile}`);
   console.log(`\nReview the document and answer the questions, then run 'lv answer'.`);
 }

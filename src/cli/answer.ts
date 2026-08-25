@@ -35,7 +35,7 @@ export async function runAnswer(): Promise<void> {
   const changesDir = getChangesDir(repoRoot, ticketId);
   const docFile = currentStep === 'analysis'
     ? path.join(changesDir, '01-analysis.md')
-    : path.join(changesDir, '02-design.md');
+    : path.join(changesDir, '02-plan.md');
 
   printInfo(`Opening ${path.basename(docFile)} for editing...`);
   openEditor(docFile);

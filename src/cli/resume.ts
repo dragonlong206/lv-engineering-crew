@@ -62,7 +62,7 @@ export async function runResume(ticketId?: string): Promise<void> {
   }
 
   if (record.status === 'in_progress') {
-    const docFile = step === 'analysis' ? '01-analysis.md' : '02-design.md';
+    const docFile = step === 'analysis' ? '01-analysis.md' : '02-plan.md';
     printInfo(`Ticket ${resolvedTicketId} is waiting on you: step '${step}' is in progress.`);
     console.log(`  ${path.join(getChangesDir(repoRoot, resolvedTicketId), docFile)}`);
 

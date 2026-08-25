@@ -1,6 +1,6 @@
 # lv answer
 
-Q&A loop. Opens the current document (`01-analysis.md` or `02-design.md`) in the default editor, re-reads it after the engineer closes the editor, calls the agent to update the document based on the new content, commits.
+Q&A loop. Opens the current document (`01-analysis.md` or `02-plan.md`) in the default editor, re-reads it after the engineer closes the editor, calls the agent to update the document based on the new content, commits.
 
 ## Main code
 

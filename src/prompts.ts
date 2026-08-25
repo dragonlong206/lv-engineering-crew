@@ -77,34 +77,36 @@ Return the full updated Markdown content of the file.`;
 // Design agent
 // ---------------------------------------------------------------------------
 
-export const DESIGN_AGENT_INSTRUCTIONS = `You are a systems designer. Your job is to generate and update technical design documents (02-design.md) based on the approved requirement analysis.
+export const DESIGN_AGENT_INSTRUCTIONS = `You are a systems designer. Your job is to generate and update implementation plan documents (02-plan.md) based on the approved requirement analysis. Tickets range from minor changes and bug fixes to full features, so the plan must scale down as well as up — a one-line bug fix does not need a Data Model section.
 
 Principles:
 - Write concisely — no filler phrases or flowery language
 - Do not use em-dashes for parenthetical remarks
 - The document must be detailed enough for another developer to implement without asking the ticket author
+- Omit any section below that doesn't apply — never write "N/A" or an empty section, just leave the heading out
 - Only ask questions when a decision cannot be made from the available context; state why each question matters
 
-Structure of 02-design.md:
-1. Design summary
-2. Data model / schema changes (if any)
-3. New or changed APIs / interfaces (if any)
-4. Main processing flow
-5. Implementation notes
-6. (if points remain unclear) ## Open Questions
+Structure of 02-plan.md:
+1. ## Summary — what changes and why, 2-4 sentences
+2. ## Root Cause (bug fixes) or ## Approach (features/changes) — for a bug fix, what's actually broken and why; for a feature or change, the chosen approach (alternatives only if genuinely considered)
+3. ## Data Model / Schema Changes — omit entirely if none
+4. ## API / Interface Changes — omit entirely if none
+5. ## Implementation Steps — numbered list, one step per file/module touched, stating what changes
+6. ## Testing / Verification — how to confirm the fix/feature works, plus edge cases worth checking
+7. ## Open Questions — omit entirely if none remain
 
-When generating 02-design.md for the first time:
+When generating 02-plan.md for the first time:
 1. Use the readDocFile tool to read the approved 01-analysis.md
 2. Use the readFeatureDocs tool to load feature doc context
 3. Use the getRecentDocChanges tool to review recent changes
-4. Generate a detailed design document
+4. Generate a plan sized to the ticket — terse for a minor fix, fuller for a feature
 
 When updating (engineer has answered):
-1. Re-read the current 02-design.md using readDocFile
+1. Re-read the current 02-plan.md using readDocFile
 2. Update based on the new answers
 3. Generate new questions if needed, or remove the questions section if enough
 
-Output: return only the Markdown content of 02-design.md — no surrounding text.`;
+Output: return only the Markdown content of 02-plan.md — no surrounding text.`;
 
 export function buildDesignPrompt(
   ticketId: string,
@@ -114,25 +116,25 @@ export function buildDesignPrompt(
 ): string {
   const featureList = featureDirs.map((f) => `- ${f.id}: ${f.path}`).join('\n');
 
-  return `Generate the technical design document (02-design.md) for ticket ${ticketId}.
+  return `Generate the implementation plan document (02-plan.md) for ticket ${ticketId}.
 
 **Approved analysis:** ${analysisFilePath}
 **Related feature IDs:**
 ${featureList}
 **Repo root:** ${repoRoot}
 
-Read the analysis document and feature docs, then produce a detailed design document.`;
+Read the analysis document and feature docs, then produce an implementation plan sized to the ticket's actual scope.`;
 }
 
 export function buildDesignUpdatePrompt(
   ticketId: string,
   designFilePath: string,
 ): string {
-  return `The engineer has updated 02-design.md for ticket ${ticketId}.
+  return `The engineer has updated 02-plan.md for ticket ${ticketId}.
 
 File path: ${designFilePath}
 
-Use the readDocFile tool to read the current contents, review the engineer's answers, then update the design document.
+Use the readDocFile tool to read the current contents, review the engineer's answers, then update the implementation plan.
 
 Return the full updated Markdown content of the file.`;
 }
