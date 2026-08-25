@@ -38,6 +38,7 @@ export const ModelsConfigSchema = z.object({
   analysis: z.string().optional(),
   design: z.string().optional(),
   bootstrap: z.string().optional(),
+  init: z.string().optional(),
 });
 export type ModelsConfig = z.infer<typeof ModelsConfigSchema>;
 
@@ -46,6 +47,8 @@ export const ConfigSchema = z.object({
   default_branch: z.string().default("main"),
   model: z.string().default("openai/gpt-4o"),
   models: ModelsConfigSchema.optional(),
+  feature_id_prefix: z.string().default("F"),
+  feature_id_digits: z.number().int().positive().default(4),
   lark_token: z.string().optional(),
   openai_api_key: z.string().optional(),
   anthropic_api_key: z.string().optional(),

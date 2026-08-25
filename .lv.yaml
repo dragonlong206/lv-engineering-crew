@@ -1,7 +1,7 @@
 lark:
   base_id: "xxx"
   table_id: "xxx"
-  feature_id_field: "Feature ID"   # column name for feature IDs in Lark Base
+  feature_id_field: "Feature ID" # column name for feature IDs in Lark Base
 
 default_branch: main
 
@@ -10,6 +10,11 @@ model: openai/gpt-4o
 
 # Per-step model — omit a field to fall back to the default
 models:
-  analysis: openai/gpt-4o
-  design: openai/gpt-4o
-  bootstrap: openai/gpt-4o-mini
+  analysis: openai/gpt-5.4-mini
+  design: openai/gpt-5.4-mini
+  bootstrap: openai/gpt-5.4-mini
+  init: openai/gpt-5.4-mini
+
+# Feature ID auto-increment used by `lv init` (e.g. F0001, F0002, ...)
+feature_id_prefix: "F"
+feature_id_digits: 4

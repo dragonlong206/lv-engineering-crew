@@ -8,4 +8,4 @@
 | [lv-approve](./lv-approve/overview.md) | approve: lock the current step, advance to the next |
 | [lv-design](./lv-design/overview.md) | design: generate design doc after analysis is approved |
 | [lv-status](./lv-status/overview.md) | status: print current ticket state |
-- [lv-bootstrap](./lv-bootstrap/overview.md)
+| [lv-init](./lv-init/overview.md) | init: split requirement documents into features, allocate Fxxxx IDs |

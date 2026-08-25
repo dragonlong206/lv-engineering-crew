@@ -4,7 +4,7 @@ import type { LarkTicket } from './tools/lark.js';
 // Shared
 // ---------------------------------------------------------------------------
 
-export const BOOTSTRAP_HEADER = `<!-- AUTO-GENERATED — not yet verified. Review and edit before committing. -->
+export const AUTO_GENERATED_HEADER = `<!-- AUTO-GENERATED — not yet verified. Review and edit before committing. -->
 
 `;
 
@@ -172,4 +172,83 @@ Be concise. Return only the Markdown content — no surrounding text.
 ## Code
 
 ${codeBlock}`;
+}
+
+// ---------------------------------------------------------------------------
+// Bootstrap — autonomous codebase scan mode (no --paths)
+// ---------------------------------------------------------------------------
+
+export const BOOTSTRAP_AGENT_INSTRUCTIONS = `You are a senior engineer documenting a feature by exploring an actual codebase. You have tools to list files, read files, and search code — use them to ground everything you write in what is really in the repository. Do not invent components, APIs, or behavior you have not verified by reading the code.
+
+You may be given an existing draft overview.md (and design.md). "Refine" does NOT mean copy the draft forward with light rewording — it means: keep sections whose claims you've verified are still true (e.g. requirements-derived purpose/scope/constraints that aren't about code), and rewrite any section whose factual claims are about the code (function signatures, CLI flags/options, file names, module names, architecture) purely from what you observe in your exploration this run. Never trust the draft for a code fact — verify it, and if you didn't check it, don't assert it. A draft that's gone stale (renamed functions, new options, new files) is the normal case, not the exception — assume it may be wrong until you've confirmed otherwise.
+
+You may instead (or additionally) be given a short feature name/description hint. Use it to seed your search — treat it as a starting hypothesis about what the feature is and where to look, not as text to copy verbatim into the output. If neither a draft nor a hint is given, generate both documents purely from what you find in the code.
+
+If the feature is a CLI command, tool, or public API, use searchCode to find where it's registered/exposed (e.g. the command-registration file) so you capture its current full set of flags/parameters, not just what one implementation file suggests.
+
+Be economical: use listFiles/searchCode to narrow down to the handful of files that actually matter, then readFile only those — but do not skip re-reading a file just because the draft already describes it; the draft is what you're trying to correct. Aim to finish exploring within about 10 tool calls and always produce a final JSON answer — never end your turn on a tool call.
+
+Be concise. Do not use em-dashes for parenthetical remarks.
+
+Return ONLY strict JSON matching this shape — no surrounding text, no code fences:
+{"overviewMarkdown": "...", "designMarkdown": "..."}
+
+overviewMarkdown must cover: Purpose of the feature, Main components, High-level flow, Constraints and assumptions, Current state of the code.
+designMarkdown must cover: Architecture and layers, Data model / schema, APIs / interfaces, Key design decisions.`;
+
+export function buildBootstrapScanPrompt(
+  featureId: string,
+  repoRoot: string,
+  existingOverviewMd?: string,
+  existingDesignMd?: string,
+  featureName?: string,
+  featureDescription?: string,
+): string {
+  const draftParts: string[] = [];
+  if (featureName || featureDescription) {
+    draftParts.push(
+      `## Feature hint\n${featureName ? `Name: ${featureName}\n` : ''}${featureDescription ? `Description: ${featureDescription}\n` : ''}`,
+    );
+  }
+  if (existingOverviewMd) {
+    draftParts.push(`## Existing draft overview.md (refine this, don't discard it)\n\n${existingOverviewMd}`);
+  }
+  if (existingDesignMd) {
+    draftParts.push(`## Existing draft design.md (refine this, don't discard it)\n\n${existingDesignMd}`);
+  }
+  const draftSection = draftParts.length > 0 ? `${draftParts.join('\n\n')}\n\n` : '';
+
+  return `Explore the codebase to produce finalized overview.md and design.md content for the feature '${featureId}'.
+
+**Repo root:** ${repoRoot}
+
+${draftSection}Use your tools (listFiles, readFile, searchCode) to find and read the code relevant to '${featureId}' before writing anything.`;
+}
+
+// ---------------------------------------------------------------------------
+// Init — split requirement documents into features
+// ---------------------------------------------------------------------------
+
+export function buildInitPrompt(docsBlock: string): string {
+  return `You are a requirements analyst. Read the following requirement/design documents (which may include BRDs, SRDs, SSDs, and UI design/prototype references) and split them into distinct features suitable for independent implementation.
+
+For each feature, produce:
+- title: a short human-readable name
+- overviewMarkdown: the full Markdown body for that feature's overview.md, using exactly this section structure:
+## Purpose of the Feature
+## Scope / Requirements Summary
+## Constraints and Assumptions
+## Source References
+- sourceRefs: the document names/paths or URLs this feature was derived from
+
+Do not invent a "Current State of the Code" section — that is added later by a separate codebase-scanning step (lv bootstrap).
+
+Be concise. Do not use em-dashes for parenthetical remarks.
+
+Return ONLY strict JSON matching this shape — no surrounding text, no code fences:
+{"features": [{"title": "...", "overviewMarkdown": "...", "sourceRefs": ["..."]}]}
+
+## Documents
+
+${docsBlock}`;
 }

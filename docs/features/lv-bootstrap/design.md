@@ -1,61 +1,60 @@
 <!-- AUTO-GENERATED — not yet verified. Review and edit before committing. -->
 
-```markdown
 # Design Document for 'lv-bootstrap'
 
 ## Architecture and Layers
+`lv-bootstrap` is split into a thin CLI entrypoint, a bootstrap runner, and two AI-driven generation paths.
 
-### Overview
-The 'lv-bootstrap' feature is designed to automate the documentation generation process for software features by utilizing an AI model. It consists of CLI commands that read file contents from specified directories, invoke AI-driven document generation, and write the outputs into markdown files.
-
-### Architecture Layers
-1. **Presentation Layer**: Handles CLI interactions, including argument parsing and user feedback.
-2. **Application Layer**: Executes the main logic, managing configuration loading, file reading, and invoking AI prompts.
-3. **Data Layer**: Facilitates file system interactions for reading source files and writing generated markdown files.
-4. **AI Integration Layer**: Integrates with the 'mastra/core/agent' to leverage an AI model for documentation generation.
+- **CLI layer**: `src/index.ts` registers the `bootstrap` command and forwards `feature-id`, `--paths`, `--name`, and `--description` into `runBootstrap()`.
+- **Application layer**: `src/cli/bootstrap.ts` handles configuration loading, branching between path-based and autonomous scan flows, prompt construction, output writing, and index maintenance.
+- **Agent layer**: `bootstrapAgent` generates docs from a supplied code block, while `bootstrapScanAgent` can inspect the repository using tools and produce finalized docs in JSON form.
+- **Tooling layer**: `src/tools/codebase.ts` provides reusable file discovery and search tools for both the command path and the autonomous agent.
+- **Filesystem layer**: The command reads repo files directly and writes docs under `docs/features/<feature-id>/`.
 
 ## Data Model / Schema
+### Configuration
+`loadConfig()` reads `.lv.yaml` and `.lv.local.yaml`, merges them, applies environment overrides derived from uppercased keys, validates the result with `ConfigSchema`, and publishes string values into `process.env`.
 
-### Configuration Model
-- The configuration is loaded from a defined configuration file and includes:
-  - Model specifications for the AI agent.
-  - Repository root and features directory paths.
+### Code context format
+Path-based generation builds a single Markdown string with repeated sections of the form:
 
-### File Context Structure
-- The documented code context structure follows:
-  ```markdown
-  ### <relative_path>
-  ```
-  - Each code block contains the content inclusive of its relative path.
+```markdown
+### <relative/path>
+``` 
 
-### Output Files
-- **Overview Markdown (`overview.md`)**
-- **Design Markdown (`design.md`)**
+followed by the file contents inside a fenced code block.
+
+### Output files
+- `docs/features/<feature-id>/overview.md`
+- `docs/features/<feature-id>/design.md`
+- `docs/features/INDEX.md`
+
+### Autonomous scan output
+The scan agent is expected to return JSON matching:
+```json
+{"overviewMarkdown":"...","designMarkdown":"..."}
+```
 
 ## APIs / Interfaces
+### Public command interface
+- `bootstrap <feature-id>`
+- Options:
+  - `--paths <paths>`: comma-separated repo-relative or absolute file or directory paths
+  - `--name <name>`: optional feature name hint for autonomous mode only
+  - `--description <description>`: optional feature description hint for autonomous mode only
 
-### Functions
-- `runBootstrap(featureId: string, pathsArg: string): Promise<void>`
-  - **Inputs**:
-    - `featureId`: Identifier for the feature being documented.
-    - `pathsArg`: Comma-separated string of paths for code files or directories.
-  - **Outputs**: Generates markdown files for overview and design documentation of the feature.
+### Core function
+- `runBootstrap(featureId: string, pathsArg?: string, hint?: BootstrapScanHint): Promise<void>`
+  - Routes to either `runBootstrapFromPaths()` or `runBootstrapFromScan()`.
 
-### Helper Functions
-- `getAllFiles(dir: string): string[]`
+### Internal helper interface
 - `updateIndex(repoRoot: string, featureId: string): void`
+  - Creates `docs/features/INDEX.md` if missing and otherwise appends the feature link only if it is not already present.
 
 ## Key Design Decisions
-
-1. **AI Model Selection**: Utilizes the 'openai/gpt-4o-mini' model to facilitate intelligent documentation generation, ensuring relevance and coherence.
-  
-2. **Directory Traversal**: Implements a recursive file-reading strategy restricted to specific file types (e.g., `.ts`, `.js`, etc.) while skipping irrelevant directories (e.g., `node_modules`), optimizing for performance.
-
-3. **Markdown Structure**: Adopts a uniform markdown structure for output files, promoting readability and ease of modification.
-
-4. **Index Management**: Introduces a feature index (`INDEX.md`) that automatically updates whenever new documentation is generated, streamlining navigation for developers.
-
-5. **Error Handling**: Includes basic error handling for missing paths and directories, ensuring the CLI provides clear feedback to the user.
-
-This design prioritizes maintainability and extensibility, allowing future enhancements such as additional AI features or integration with other tooling to be added with minimal disruption.
-```
+1. **Two generation strategies**: The command supports both deterministic path-based input and autonomous repo scanning, which makes it useful both for targeted documentation work and for feature discovery.
+2. **Separate prompts for overview and design**: Path-based mode generates each document independently, allowing the model to focus on the requested document shape.
+3. **Tool-based autonomous refinement**: Autonomous mode uses `listFiles`, `readFile`, and `searchCode` tools so the model can inspect the repository before writing JSON output.
+4. **Shared output convention**: Both modes write to the same feature directory layout under `docs/features`, with a standardized auto-generated header.
+5. **Index file maintenance**: `INDEX.md` is updated automatically to keep feature documentation discoverable.
+6. **Config-driven model selection**: The bootstrap step uses `getModelForStep(config, "bootstrap")`, so the configured bootstrap model can override the default model defined on the agent.

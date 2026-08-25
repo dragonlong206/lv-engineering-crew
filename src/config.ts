@@ -66,6 +66,6 @@ export function getFeatureDir(repoRoot: string, featureId: string): string {
   return path.join(repoRoot, 'docs', 'features', featureId);
 }
 
-export function getModelForStep(config: Config, step: Step | 'bootstrap'): string {
+export function getModelForStep(config: Config, step: Step | 'bootstrap' | 'init'): string {
   return config.models?.[step] ?? config.model;
 }

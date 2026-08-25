@@ -24,6 +24,13 @@ export function extractText(result: { text: string }): string {
   return result.text ?? '';
 }
 
+export function extractJson<T>(text: string): T {
+  const trimmed = text.trim();
+  const fenceMatch = trimmed.match(/^```(?:json|markdown)?\s*([\s\S]*?)\s*```$/);
+  const jsonStr = fenceMatch ? fenceMatch[1] : trimmed;
+  return JSON.parse(jsonStr) as T;
+}
+
 export function extractUsage(result: {
   totalUsage?: { inputTokens?: number; outputTokens?: number };
   usage?: { inputTokens?: number; outputTokens?: number };

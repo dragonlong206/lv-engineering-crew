@@ -48,15 +48,23 @@ program
 
 program
   .command('bootstrap <feature-id>')
-  .description('Generate initial feature docs from existing code')
-  .option('--paths <paths>', 'Comma-separated paths to read code from')
-  .action(async (featureId: string, opts: { paths?: string }) => {
-    if (!opts.paths) {
-      console.error('Error: --paths is required');
-      process.exit(1);
-    }
+  .description('Generate feature docs from code — from --paths, or by scanning the repo autonomously')
+  .option('--paths <paths>', 'Comma-separated paths to read code from (omit to scan the repo autonomously)')
+  .option('--name <name>', 'Feature name hint for autonomous scan mode (no --paths)')
+  .option('--description <description>', 'Feature description hint for autonomous scan mode (no --paths)')
+  .action(async (featureId: string, opts: { paths?: string; name?: string; description?: string }) => {
     const { runBootstrap } = await import('./cli/bootstrap.js');
-    await runBootstrap(featureId, opts.paths).catch(die);
+    await runBootstrap(featureId, opts.paths, { name: opts.name, description: opts.description }).catch(die);
+  });
+
+program
+  .command('init <docs...>')
+  .description('Analyze requirement documents (BRD/SRD/SSD/prototypes) and create feature folders')
+  .option('--id-prefix <prefix>', 'Feature ID prefix (default from .lv.yaml)')
+  .option('--id-digits <n>', 'Feature ID zero-padded digit count (default from .lv.yaml)')
+  .action(async (docs: string[], opts: { idPrefix?: string; idDigits?: string }) => {
+    const { runInit } = await import('./cli/init.js');
+    await runInit(docs, opts).catch(die);
   });
 
 program
