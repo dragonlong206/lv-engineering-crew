@@ -10,7 +10,10 @@ export const AUTO_GENERATED_HEADER = `<!-- AUTO-GENERATED — not yet verified. 
 // Bootstrap
 // ---------------------------------------------------------------------------
 
-export function buildBootstrapOverviewPrompt(featureId: string, codeBlock: string): string {
+export function buildBootstrapOverviewPrompt(
+  featureId: string,
+  codeBlock: string,
+): string {
   return `You are a systems analyst. Read the following code and generate an overview.md document for the feature '${featureId}'.
 
 overview.md should cover:
@@ -27,7 +30,10 @@ Be concise. Return only the Markdown content — no surrounding text.
 ${codeBlock}`;
 }
 
-export function buildBootstrapDesignPrompt(featureId: string, codeBlock: string): string {
+export function buildBootstrapDesignPrompt(
+  featureId: string,
+  codeBlock: string,
+): string {
   return `You are a systems designer. Read the following code and generate a design.md document for the feature '${featureId}'.
 
 design.md should cover:
@@ -88,7 +94,7 @@ export const CONTEXT_POINTER = CONTEXT_POINTER_LINES.join("\n");
 // (`openspec instructions archive --change <name> --json`'s `operationGuidance` field) and
 // followed advisorily, never blocking the archive if ignored.
 export const ARCHIVE_GUIDANCE =
-  "Before completing this archive, for each feature ID recorded in this change's `docs/changes/<change-id>/state.yaml`, run `lv bootstrap <feature-id>` to refresh that feature's docs against the code this change shipped.";
+  "Before completing this archive, for each feature ID recorded in this change, run `lv bootstrap <feature-id>` to refresh that feature's docs against the code this change shipped.";
 
 export function buildBootstrapScanPrompt(
   featureId: string,
@@ -101,16 +107,21 @@ export function buildBootstrapScanPrompt(
   const draftParts: string[] = [];
   if (featureName || featureDescription) {
     draftParts.push(
-      `## Feature hint\n${featureName ? `Name: ${featureName}\n` : ''}${featureDescription ? `Description: ${featureDescription}\n` : ''}`,
+      `## Feature hint\n${featureName ? `Name: ${featureName}\n` : ""}${featureDescription ? `Description: ${featureDescription}\n` : ""}`,
     );
   }
   if (existingOverviewMd) {
-    draftParts.push(`## Existing draft overview.md (refine this, don't discard it)\n\n${existingOverviewMd}`);
+    draftParts.push(
+      `## Existing draft overview.md (refine this, don't discard it)\n\n${existingOverviewMd}`,
+    );
   }
   if (existingDesignMd) {
-    draftParts.push(`## Existing draft design.md (refine this, don't discard it)\n\n${existingDesignMd}`);
+    draftParts.push(
+      `## Existing draft design.md (refine this, don't discard it)\n\n${existingDesignMd}`,
+    );
   }
-  const draftSection = draftParts.length > 0 ? `${draftParts.join('\n\n')}\n\n` : '';
+  const draftSection =
+    draftParts.length > 0 ? `${draftParts.join("\n\n")}\n\n` : "";
 
   return `Explore the codebase to produce finalized overview.md and design.md content for the feature '${featureId}'.
 

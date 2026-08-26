@@ -40,4 +40,4 @@ context: |
 operations:
   archive:
     guidance:
-      - Before completing this archive, for each feature ID recorded in this change's `docs/changes/<change-id>/state.yaml`, run `lv bootstrap <feature-id>` to refresh that feature's docs against the code this change shipped.
+      - Before completing this archive, for each feature ID recorded in this change, run `lv bootstrap <feature-id>` to refresh that feature's docs against the code this change shipped.

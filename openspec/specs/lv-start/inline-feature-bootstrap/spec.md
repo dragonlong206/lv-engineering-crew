@@ -41,4 +41,4 @@ The system SHALL include newly generated feature docs in the same commit as the 
 
 #### Scenario: Confirmed feature docs ship in the start commit
 - **WHEN** the user confirms to continue after reviewing generated feature docs
-- **THEN** the commit created at the end of `lv start` includes those feature docs alongside the branch's analysis document and state file
+- **THEN** the commit created at the end of `lv start` includes those feature docs alongside the state file — there is no analysis document to include, since `lv start` no longer generates one
