@@ -88,7 +88,6 @@ async function startFromTicket(ticketId: string, opts: StartOptions): Promise<vo
     for (const docs of generated) {
       console.log(`  ${docs.overviewPath}`);
       console.log(`  ${docs.designPath}`);
-      console.log(`  ${docs.requirementsPath}`);
     }
 
     const proceed = await confirm(`\nReview the files above. Continue starting ${ticketId}? [y/N] `);

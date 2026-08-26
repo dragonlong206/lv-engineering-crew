@@ -1,0 +1,25 @@
+## 1. Centralize instructional-text constants in `src/prompts.ts`
+
+- [x] 1.1 Add an `ARCHIVE_GUIDANCE` constant to `src/prompts.ts` (not `src/cli/init.ts`) instructing: for each feature ID in the archiving change's `docs/changes/<change-id>/state.yaml`, run `lv bootstrap <feature-id>` to refresh that feature's docs before completing the archive. Verify by reading it standalone — it should make sense with no other context, matching how `operationGuidance` entries are consumed per `.claude/commands/opsx/archive.md`.
+- [x] 1.2 Move the existing `CONTEXT_POINTER` constant from `src/cli/init.ts` to `src/prompts.ts`, updating `init.ts` to import it instead of defining it. Verify `addContextPointer()`'s behavior is unchanged (same whitespace-normalized detection, same append/merge output) by re-running its existing coverage (or a quick scratch-repo `lv init` check) before and after the move.
+
+## 2. Archive guidance write logic
+
+- [x] 2.1 Implement `addArchiveGuidance(repoRoot)` in `src/cli/init.ts`, importing `ARCHIVE_GUIDANCE` from `src/prompts.ts`: return early (no write) when a whitespace-normalized substring check finds `ARCHIVE_GUIDANCE` already present in `openspec/config.yaml`. Verify by calling it twice in a row against the same fixture file and confirming the second call performs no write (e.g. via an `fs.writeFileSync`/`fs.appendFileSync` spy, or by comparing file mtimes).
+- [x] 2.2 Implement the fresh-append path: when `/^operations:/m` does not match the raw config, append a new top-level `operations:\n  archive:\n    guidance:\n      - <ARCHIVE_GUIDANCE>\n` block. Verify against a scratch repo whose `openspec/config.yaml` is the untouched install template (`operations:` only in comments): after running `lv init`, `js-yaml`-parsing the file yields `operations.archive.guidance` as an array containing exactly the guidance string.
+- [x] 2.3 Implement the merge path: when `/^operations:/m` matches, parse the file with `js-yaml`, build `operations.archive.guidance` (creating the `operations`, `archive`, and/or `guidance` keys as needed if any are missing), and push the guidance string only if an equivalent entry isn't already present. Verify against three scratch fixtures — (a) `operations: { apply: { guidance: [...] } }` with no `archive` key, (b) `operations: { archive: {} }` with no `guidance` list, (c) `operations: { archive: { guidance: [...] } }` already containing unrelated entries — confirming each ends up with the new guidance string appended exactly once and existing entries untouched.
+
+## 3. Sync-convention text
+
+- [x] 3.1 Add a line to the `CONTEXT_POINTER` constant in `src/prompts.ts` documenting the sync-time convention: when syncing a change's delta specs to main specs directly (not via archive), also refresh docs for any feature IDs the change touches, noting this line is advisory only. Verify the added line explicitly states it is unenforced (mirrors what `specs/lv-init/feature-doc-freshness/spec.md`'s sync scenario requires). *(Correction during apply: the existing pointer was already 3 lines — 1 header + 2 bullets — not 2; this adds a 4th line, not a 3rd.)*
+- [x] 3.2 Fix the resulting idempotency gap: `addContextPointer()`'s existing check tests whether the *entire* `CONTEXT_POINTER` string is already present, so a repo wired before this task (the pre-change 3-line pointer) would fail that whole-string check after the constant grows a 4th line, take the "already active" merge path, and append the full 4-line text as a second block — duplicating the original 3 lines. Change the presence check to test each line independently. Verify with a fixture whose `context:` already holds exactly the pre-change 3-line pointer: after running the updated `lv init`, the file contains each of the 4 lines exactly once, not the first 3 lines twice.
+
+## 4. Wiring
+
+- [x] 4.1 Call `addArchiveGuidance(repoRoot)` from `runInit()` alongside the existing `addContextPointer(repoRoot)` call. Verify by running `lv init` end-to-end against a scratch repo with the fresh install template and confirming both `context:` (4 lines) and `operations.archive.guidance` are present in one pass.
+
+## 5. Documentation and validation
+
+- [x] 5.1 Update `CLAUDE.md`'s "OpenSpec integration" section to mention that `lv init` also writes `operations.archive.guidance` and the sync-convention line, alongside the existing `context:` pointer description. In the same edit, broaden `CLAUDE.md`'s description of `src/prompts.ts` (currently framed as LLM-agent-instructions-only) to note it also centralizes non-LLM instructional/pointer text such as `CONTEXT_POINTER` and `ARCHIVE_GUIDANCE`. Verify by re-reading both sections for accuracy against the shipped code.
+- [x] 5.2 Run `npx tsc --noEmit` and `npm run build` and confirm both succeed with no new errors.
+- [x] 5.3 Run `lv init` against this repo itself (after `integrate-openspec-workflow` has landed) and confirm `openspec/config.yaml` ends up with both the updated `context:` block and `operations.archive.guidance`, then run it a second time and confirm no duplication in either.
