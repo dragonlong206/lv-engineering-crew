@@ -1,0 +1,14 @@
+ticket_id: recvtnZPvs55yQ
+title: >-
+  Add support to multiple features in a task and ability to sync feature to Lark
+  Base
+description: >-
+  A task can relate to multiple features.
+
+  When `lv bootstrap` or `lv start` create a new feature, create it on Features
+  table on Lark
+feature_ids:
+  - lv-start
+branch: feature/recvtnZPvs55yQ-add-support-to-multiple-features-in-a-task-and-abi
+created_at: '2026-08-26T08:25:21.664Z'
+lv_version: 0.1.0
