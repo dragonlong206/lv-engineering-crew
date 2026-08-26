@@ -1,19 +1,35 @@
 import fs from 'fs';
-import path from 'path';
-import { loadConfig, getRepoRoot, getChangesDir, getFeatureDir } from '../config.js';
+import { loadConfig, getRepoRoot, getFeatureDir } from '../config.js';
 import { fetchTicket, getTenantAccessToken, updateTicketFeatureId } from '../tools/lark.js';
 import { createBranch, commitAll, push } from '../integrations/git/client.js';
 import { writeState } from '../engine/state-io.js';
-import { renderBranchName } from '../engine/branch-naming.js';
+import { renderBranchName, slugify } from '../engine/branch-naming.js';
 import { allocateFeatureIds } from '../engine/feature-id.js';
 import { generateFeatureDocsFromScan } from './bootstrap.js';
-import { analysisAgent } from '../agents/analysis-agent.js';
-import { buildAnalysisPrompt } from '../prompts.js';
-import { printInfo, printSuccess, printError, printWarn, confirm, writeFile, extractText, extractUsage } from './helpers.js';
-import { LV_VERSION } from '../types.js';
-import { getModelForStep } from '../config.js';
+import { printInfo, printSuccess, printError, printWarn, confirm } from './helpers.js';
+import { LV_VERSION, type State } from '../types.js';
 
-export async function runStart(ticketId: string, opts: { type?: string } = {}): Promise<void> {
+export interface StartOptions {
+  type?: string;
+  description?: string;
+}
+
+export async function runStart(ticketId: string | undefined, opts: StartOptions = {}): Promise<void> {
+  if (ticketId) {
+    await startFromTicket(ticketId, opts);
+    return;
+  }
+
+  if (opts.description) {
+    await startFromDescription(opts.description, opts);
+    return;
+  }
+
+  printError("Provide a ticket ID (lv start <ticket-id>) or a description (lv start --description \"...\").");
+  process.exit(1);
+}
+
+async function startFromTicket(ticketId: string, opts: StartOptions): Promise<void> {
   const config = loadConfig();
   const repoRoot = getRepoRoot();
 
@@ -108,47 +124,60 @@ export async function runStart(ticketId: string, opts: { type?: string } = {}): 
   printInfo(`Creating branch ${branchName}...`);
   await createBranch(repoRoot, branchName, config.default_branch);
 
-  printInfo('Generating analysis document...');
-  const prompt = buildAnalysisPrompt(ticket, featureDirs, repoRoot);
-  const threadId = `${ticketId}-analysis`;
-
-  const analysisModel = getModelForStep(config, 'analysis');
-  const startTime = Date.now();
-  const result = await analysisAgent.generate(prompt, {
-    memory: { thread: threadId, resource: ticketId },
-    model: analysisModel,
-  });
-  const durationSeconds = (Date.now() - startTime) / 1000;
-
-  const analysisContent = extractText(result);
-  const usage = extractUsage(result);
-
-  const changesDir = getChangesDir(repoRoot, ticketId);
-  const analysisFile = path.join(changesDir, '1.proposal.md');
-  writeFile(analysisFile, analysisContent);
-
   const now = new Date().toISOString();
-  writeState(repoRoot, {
+  const state: State = {
     ticket_id: ticketId,
+    title: ticket.title,
+    description: ticket.description,
     feature_ids: featureIds,
     branch: branchName,
-    current_step: 'analysis',
-    steps: {
-      analysis: {
-        status: 'in_progress',
-        iterations: 1,
-        model: analysisModel,
-        tokens_in: usage.tokensIn,
-        tokens_out: usage.tokensOut,
-        duration_seconds: durationSeconds,
-      },
-    },
     created_at: now,
     lv_version: LV_VERSION,
-  });
+  };
+  writeState(repoRoot, ticketId, state);
 
-  await commitAll(repoRoot, `lv: start ${ticketId} — analysis draft`);
+  await commitAll(repoRoot, `lv: start ${ticketId} — change context`);
 
+  await pushBranch(repoRoot, branchName);
+
+  printSuccess(`Started ticket ${ticketId}`);
+  printNextSteps(ticketId);
+}
+
+async function startFromDescription(description: string, opts: StartOptions): Promise<void> {
+  const config = loadConfig();
+  const repoRoot = getRepoRoot();
+
+  const title = deriveTitle(description);
+  const changeId = changeIdSlug(title) || `change_${Date.now()}`;
+
+  // changeId is already a slug of the title, so it doubles as {summary} too — passing
+  // `title` again as `summary` would duplicate it in the rendered branch name.
+  const branchName = renderBranchName(config, changeId, { type: opts.type });
+
+  printInfo(`Creating branch ${branchName}...`);
+  await createBranch(repoRoot, branchName, config.default_branch);
+
+  const now = new Date().toISOString();
+  const state: State = {
+    title,
+    description,
+    feature_ids: [],
+    branch: branchName,
+    created_at: now,
+    lv_version: LV_VERSION,
+  };
+  writeState(repoRoot, changeId, state);
+
+  await commitAll(repoRoot, `lv: start ${changeId} — change context`);
+
+  await pushBranch(repoRoot, branchName);
+
+  printSuccess(`Started change ${changeId}`);
+  printNextSteps(changeId);
+}
+
+async function pushBranch(repoRoot: string, branchName: string): Promise<void> {
   try {
     printInfo(`Pushing branch ${branchName}...`);
     await push(repoRoot, branchName);
@@ -156,8 +185,26 @@ export async function runStart(ticketId: string, opts: { type?: string } = {}): 
   } catch {
     printError('Push failed — no remote configured or no network. Commit is local.');
   }
+}
 
-  printSuccess(`Started ticket ${ticketId}`);
-  console.log(`\nAnalysis: ${analysisFile}`);
-  console.log(`\nReview the document and answer the questions, then run 'lv answer'.`);
+function printNextSteps(changeId: string): void {
+  console.log(`\nContext: docs/changes/${changeId}/state.yaml`);
+  console.log(`\nContinue with your coding agent's OpenSpec workflow (e.g. /opsx:propose) to explore, propose, and design this change.`);
+}
+
+/** A short title for state.yaml/branch summary — the description's first line, truncated. */
+function deriveTitle(description: string, maxLength = 80): string {
+  const firstLine = description.split('\n')[0].trim() || description.trim();
+  if (firstLine.length <= maxLength) return firstLine;
+  return `${firstLine.slice(0, maxLength).replace(/\s+\S*$/, '')}...`;
+}
+
+/**
+ * A change ID standing in for `{ticket_id}` in the branch pattern must not contain the
+ * pattern's own separator (`-` by default) — matchBranch()'s non-greedy {ticket_id} capture
+ * assumes that, same as it does for real (hyphen-free) Lark ticket IDs. `slugify()` produces
+ * hyphens, so swap them for underscores here rather than reusing it directly.
+ */
+function changeIdSlug(text: string): string {
+  return slugify(text).replace(/-/g, '_');
 }

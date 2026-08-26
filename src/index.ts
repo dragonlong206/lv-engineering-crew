@@ -15,36 +15,13 @@ program
   .version(pkg.version);
 
 program
-  .command('start <ticket-id>')
-  .description('Start a new ticket: fetch from Lark, create branch, generate analysis doc')
+  .command('start [ticket-id]')
+  .description('Start a new change: from a Lark ticket ID, or from --description')
   .option('--type <type>', 'Branch type to use (default from .lv.yaml default_branch_type)')
-  .action(async (ticketId: string, opts: { type?: string }) => {
+  .option('--description <description>', 'Free-text description to start a change without a ticket')
+  .action(async (ticketId: string | undefined, opts: { type?: string; description?: string }) => {
     const { runStart } = await import('./cli/start.js');
     await runStart(ticketId, opts).catch(die);
-  });
-
-program
-  .command('answer')
-  .description('Open current doc for editing, then update based on your changes')
-  .action(async () => {
-    const { runAnswer } = await import('./cli/answer.js');
-    await runAnswer().catch(die);
-  });
-
-program
-  .command('approve')
-  .description('Approve current step and advance to the next')
-  .action(async () => {
-    const { runApprove } = await import('./cli/approve.js');
-    await runApprove().catch(die);
-  });
-
-program
-  .command('design')
-  .description('Generate design document (requires analysis to be approved)')
-  .action(async () => {
-    const { runDesign } = await import('./cli/design.js');
-    await runDesign().catch(die);
   });
 
 program
@@ -59,18 +36,17 @@ program
   });
 
 program
-  .command('init <docs...>')
-  .description('Analyze requirement documents (BRD/SRD/SSD/prototypes) and create feature folders')
-  .option('--id-prefix <prefix>', 'Feature ID prefix (default from .lv.yaml)')
-  .option('--id-digits <n>', 'Feature ID zero-padded digit count (default from .lv.yaml)')
-  .action(async (docs: string[], opts: { idPrefix?: string; idDigits?: string }) => {
+  .command('init')
+  .description('Install and configure OpenSpec for a coding agent, wired to LV context')
+  .option('--tool <tool>', 'Coding agent to install OpenSpec for (passed to `openspec init --tools`; omit to choose interactively)')
+  .action(async (opts: { tool?: string }) => {
     const { runInit } = await import('./cli/init.js');
-    await runInit(docs, opts).catch(die);
+    await runInit(opts).catch(die);
   });
 
 program
   .command('resume [ticket-id]')
-  .description('Resume a ticket: continue the workflow, or ask for approval if waiting on you')
+  .description('Check out a change\'s branch and print its context summary')
   .action(async (ticketId?: string) => {
     const { runResume } = await import('./cli/resume.js');
     await runResume(ticketId).catch(die);
@@ -78,7 +54,7 @@ program
 
 program
   .command('status')
-  .description('Show current ticket status')
+  .description('Show current change status')
   .action(async () => {
     const { runStatus } = await import('./cli/status.js');
     await runStatus().catch(die);

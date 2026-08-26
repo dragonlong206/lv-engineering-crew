@@ -1,90 +1,81 @@
 import fs from "fs";
 import path from "path";
-import { loadConfig, getRepoRoot, getFeaturesDir, getModelForStep } from "../config.js";
-import { Agent } from "@mastra/core/agent";
-import { printInfo, printSuccess, printError, writeFile, extractText, extractJson } from "./helpers.js";
-import { AUTO_GENERATED_HEADER, buildInitPrompt } from "../prompts.js";
-import { allocateFeatureIds } from "../engine/feature-id.js";
-import { readRequirementDoc, isUrl } from "../tools/doc-readers.js";
-import { updateIndex } from "./bootstrap.js";
-
-const initAgent = new Agent({
-  id: "lv-init-agent",
-  name: "LV Init Agent",
-  model: "openai/gpt-4o-mini",
-  instructions: "You are a documentation generation assistant. Follow the user's prompt exactly and return only the requested content.",
-});
-
-interface InitFeature {
-  title: string;
-  overviewMarkdown: string;
-  sourceRefs: string[];
-}
-
-interface InitResult {
-  features: InitFeature[];
-}
+import yaml from "js-yaml";
+import { execa } from "execa";
+import { getRepoRoot } from "../config.js";
+import { printInfo, printSuccess, printError } from "./helpers.js";
 
 export interface InitOptions {
-  idPrefix?: string;
-  idDigits?: string;
+  tool?: string;
 }
 
-export async function runInit(docPaths: string[], opts: InitOptions): Promise<void> {
-  const config = loadConfig();
+// Multi-line so it renders as a YAML block scalar (`context: |`) — kept short and generic
+// enough to apply to every change, so `lv start` never has to rewrite it per-change.
+const CONTEXT_POINTER = [
+  "LV Crew context: before proposing, designing, or implementing anything, read:",
+  "- the feature docs under `docs/features/<feature-id>/{overview.md,design.md}` for any feature IDs this change touches",
+  "- the current change's ticket/description context in `docs/changes/<change-id>/state.yaml` (the directory matching the current git branch)",
+].join("\n");
+
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+export async function runInit(opts: InitOptions): Promise<void> {
   const repoRoot = getRepoRoot();
 
-  if (docPaths.length === 0) {
-    printError("No requirement documents provided. Usage: lv init <doc1> [doc2 ...]");
+  printInfo(opts.tool ? `Installing OpenSpec for '${opts.tool}'...` : "Installing OpenSpec...");
+
+  const args = ["init", repoRoot];
+  if (opts.tool) args.push("--tools", opts.tool);
+
+  try {
+    await execa("openspec", args, { cwd: repoRoot, stdio: "inherit" });
+  } catch (err) {
+    printError(`OpenSpec install failed: ${(err as Error).message}`);
     process.exit(1);
   }
 
-  const prefix = opts.idPrefix ?? config.feature_id_prefix;
-  const digits = opts.idDigits ? Number(opts.idDigits) : config.feature_id_digits;
+  addContextPointer(repoRoot);
 
-  const docBlocks: string[] = [];
-  for (const raw of docPaths) {
-    if (isUrl(raw)) {
-      docBlocks.push(`Reference (not fetched): ${raw}`);
-      continue;
-    }
+  printSuccess("OpenSpec installed and wired to LV context.");
+  console.log(`\nNext: run 'lv start <ticket-id>' or 'lv start --description "..."' to begin a change.`);
+}
 
-    const absPath = path.isAbsolute(raw) ? raw : path.join(repoRoot, raw);
-    if (!fs.existsSync(absPath)) {
-      printError(`Document not found: ${absPath}`);
-      process.exit(1);
-    }
-
-    const content = await readRequirementDoc(absPath);
-    docBlocks.push(`--- Document: ${path.relative(repoRoot, absPath)} ---\n${content}`);
-  }
-  const docsBlock = docBlocks.join("\n\n");
-
-  printInfo("Analyzing requirement documents...");
-
-  const model = getModelForStep(config, "init");
-  const result = await initAgent.generate(buildInitPrompt(docsBlock), { model });
-  const parsed = extractJson<InitResult>(extractText(result));
-
-  if (!parsed.features || parsed.features.length === 0) {
-    printError("The agent did not identify any features from the provided documents.");
-    process.exit(1);
+/**
+ * Idempotently wires OpenSpec's project-wide `context:` (openspec/config.yaml) to point at
+ * LV's feature docs and per-change state.yaml, so OpenSpec's explore/propose/apply workflows
+ * load them automatically instead of the engineer pasting them into every prompt.
+ */
+function addContextPointer(repoRoot: string): void {
+  const configPath = path.join(repoRoot, "openspec", "config.yaml");
+  if (!fs.existsSync(configPath)) {
+    printError(`Expected OpenSpec config at ${configPath} after install — not found.`);
+    return;
   }
 
-  const ids = allocateFeatureIds(repoRoot, parsed.features.length, prefix, digits);
+  const raw = fs.readFileSync(configPath, "utf-8");
+  // Compare with whitespace collapsed — YAML re-wrapping/indentation (block literal on a
+  // fresh append vs. re-flowed by js-yaml's dump on a merge) must not defeat this check.
+  if (normalizeWhitespace(raw).includes(normalizeWhitespace(CONTEXT_POINTER))) return; // already wired
 
-  printSuccess(`Identified ${parsed.features.length} feature(s).`);
-  for (let i = 0; i < parsed.features.length; i++) {
-    const feature = parsed.features[i];
-    const id = ids[i];
-    const featureDir = path.join(getFeaturesDir(repoRoot), id);
+  const hasActiveContextKey = /^context:/m.test(raw);
 
-    writeFile(path.join(featureDir, "overview.md"), AUTO_GENERATED_HEADER + feature.overviewMarkdown);
-    updateIndex(repoRoot, id);
-
-    console.log(`  ${id}: ${feature.title}`);
+  if (!hasActiveContextKey) {
+    // Fresh template — `context:` only appears commented out. Append a new top-level key
+    // instead of round-tripping through js-yaml, so the template's explanatory comments
+    // stay intact.
+    const block = `\ncontext: |\n${CONTEXT_POINTER.split("\n")
+      .map((line) => `  ${line}`)
+      .join("\n")}\n`;
+    fs.appendFileSync(configPath, block, "utf-8");
+    return;
   }
 
-  console.log(`\nFiles written (not committed). Review, edit, then commit manually.`);
-  console.log(`Next: run 'lv bootstrap <feature-id>' to ground each overview in the actual code.`);
+  // An engineer already customized `context:` — merge properly via YAML instead of a blind
+  // text append, at the cost of losing this file's comments on this one rewrite.
+  const parsed = (yaml.load(raw) as Record<string, unknown>) ?? {};
+  const existing = typeof parsed.context === "string" ? parsed.context : "";
+  parsed.context = existing ? `${existing}\n\n${CONTEXT_POINTER}` : CONTEXT_POINTER;
+  fs.writeFileSync(configPath, yaml.dump(parsed, { indent: 2 }), "utf-8");
 }

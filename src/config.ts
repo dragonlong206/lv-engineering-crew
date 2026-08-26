@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import yaml from 'js-yaml';
-import { ConfigSchema, type Config, type Step } from './types.js';
+import { ConfigSchema, type Config } from './types.js';
 
 
 function findRepoRoot(startDir: string): string {
@@ -55,8 +55,9 @@ export function getRepoRoot(): string {
   return findRepoRoot(process.cwd());
 }
 
-export function getChangesDir(repoRoot: string, ticketId: string): string {
-  return path.join(repoRoot, 'docs', 'changes', ticketId);
+/** `changeId` is a ticket ID for ticket-based starts, or a slug for description-based ones. */
+export function getChangesDir(repoRoot: string, changeId: string): string {
+  return path.join(repoRoot, 'docs', 'changes', changeId);
 }
 
 export function getFeaturesDir(repoRoot: string): string {
@@ -67,7 +68,7 @@ export function getFeatureDir(repoRoot: string, featureId: string): string {
   return path.join(repoRoot, 'docs', 'features', featureId);
 }
 
-export function getModelForStep(config: Config, step: Step | 'bootstrap' | 'init'): string {
+export function getModelForStep(config: Config, step: 'bootstrap'): string {
   return config.models?.[step] ?? config.model;
 }
 

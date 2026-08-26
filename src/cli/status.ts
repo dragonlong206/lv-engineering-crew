@@ -3,7 +3,7 @@ import { readState } from '../engine/state-io.js';
 import { matchBranch } from '../engine/branch-naming.js';
 import { currentBranch } from '../integrations/git/client.js';
 import { printError } from './helpers.js';
-import type { StepRecord } from '../types.js';
+import type { State } from '../types.js';
 
 export async function runStatus(): Promise<void> {
   const config = loadConfig();
@@ -12,38 +12,25 @@ export async function runStatus(): Promise<void> {
   const branch = await currentBranch(repoRoot);
   const matched = matchBranch(config, branch);
   if (!matched) {
-    printError("Not on a ticket branch.");
+    printError("Not on a change branch.");
     process.exit(1);
   }
-  const ticketId = matched.ticketId;
+  const changeId = matched.ticketId;
 
-  const state = readState(repoRoot, ticketId);
+  const state = readState(repoRoot, changeId);
+  printStateSummary(changeId, state);
+}
 
+/** Shared by `lv status` and `lv resume` — dumps a change's state.yaml context. */
+export function printStateSummary(changeId: string, state: State): void {
   console.log('');
-  console.log(`Ticket:    ${state.ticket_id}`);
-  console.log(`Features:  ${state.feature_ids.join(', ')}`);
-  console.log(`Branch:    ${state.branch}`);
-  console.log(`Step:      ${state.current_step}`);
-  console.log(`Created:   ${state.created_at}`);
-  console.log(`Version:   ${state.lv_version}`);
-  console.log('');
-  console.log('Steps:');
-
-  function printStep(step: string, record: StepRecord | undefined): void {
-    if (!record) {
-      console.log(`  ${step.padEnd(10)} —`);
-      return;
-    }
-    const totalTokens = record.tokens_in + record.tokens_out;
-    const approved = record.approved_at ? ` (approved ${record.approved_at})` : '';
-    console.log(
-      `  ${step.padEnd(10)} ${record.status.padEnd(12)} ` +
-        `iter=${record.iterations}  tokens=${totalTokens.toLocaleString()}  ` +
-        `${record.duration_seconds.toFixed(1)}s  model=${record.model}${approved}`,
-    );
-  }
-
-  printStep('analysis', state.steps.analysis);
-  printStep('design', state.steps.design);
+  console.log(`Change:      ${changeId}`);
+  if (state.ticket_id) console.log(`Ticket:      ${state.ticket_id}`);
+  console.log(`Title:       ${state.title}`);
+  console.log(`Description: ${state.description || '(none)'}`);
+  console.log(`Features:    ${state.feature_ids.length > 0 ? state.feature_ids.join(', ') : '(none)'}`);
+  console.log(`Branch:      ${state.branch}`);
+  console.log(`Created:     ${state.created_at}`);
+  console.log(`Version:     ${state.lv_version}`);
   console.log('');
 }

@@ -1,24 +1,24 @@
 # LV Engineer Crew
 
-CLI tool for spec-driven development with human-in-the-loop. Automates the requirement analysis and technical design loop, with engineers reviewing and approving each step.
+CLI tool for spec-driven development with human-in-the-loop. LV hands the ticket/description context to [OpenSpec](https://github.com/Fission-AI/OpenSpec), which drives the explore → propose → spec → design → tasks → apply loop through your coding agent.
 
 ## Workflow (phase 1)
 
 ```
-lv init <doc-paths...>   →  split requirement docs into features, allocate Fxxxx IDs, draft overview.md
-lv bootstrap <feature-id> →  ground a feature's docs in the actual code (overview.md + design.md)
+lv init [--tool <tool>]      →  install/configure OpenSpec for a coding agent, wire it to LV's context
+lv bootstrap <feature-id>    →  ground a feature's docs in the actual code (overview.md + design.md)
 
-lv start <ticket-id>   →  generate 01-analysis.md + open questions
-lv answer              →  engineer answers, agent updates doc
-lv approve             →  lock analysis
-lv design              →  generate 02-plan.md + open questions
-lv answer              →  engineer answers, agent updates doc
-lv approve             →  lock design → create MR
+lv start <ticket-id>             →  fetch the ticket from Lark, create docs/changes/<ticket-id>/state.yaml
+lv start --description "..."     →  create docs/changes/<change-id>/state.yaml from free text, no ticket
+
+<your coding agent's OpenSpec workflow — e.g. /opsx:propose, /opsx:apply>
+    →  explore, propose, spec, design, tasks, review, and implement,
+       with LV's feature docs and state.yaml loaded automatically as context
 ```
 
-`lv init`/`lv bootstrap` populate `docs/features/` and are independent of any ticket — run them once per feature, whenever needed. `lv start` and onward operate per ticket and require every feature it references to already have docs.
+`lv init`/`lv bootstrap` populate `docs/features/` and OpenSpec's own install and are independent of any ticket — run them once per repo/feature, whenever needed. `lv start` creates a change's context; everything after that (propose, spec, design, tasks, apply) is driven by OpenSpec through your coding agent, not by a further `lv` command. There is no `lv approve` — review and advance using OpenSpec's own workflow.
 
-Coming back to a ticket later (after a break, or on a different machine)? Run `lv resume [ticket-id]` instead of trying to remember which of `answer`/`approve`/`design` comes next.
+Coming back to a change later (after a break, or on a different machine)? Run `lv resume [ticket-id]` to check out its branch and print its `state.yaml` context.
 
 ## Installation
 
@@ -57,12 +57,9 @@ default_branch_type: feature   # used when `lv start` is run without --type
 model: openai/gpt-4o   # default model
 
 models:                # per-step model — omit to use the default
-  analysis: openai/gpt-4o
-  design: openai/gpt-4o
   bootstrap: openai/gpt-4o-mini
-  init: openai/gpt-4o-mini
 
-feature_id_prefix: "F"   # used by `lv init` to allocate feature IDs (e.g. F0001)
+feature_id_prefix: "F"   # used by `lv start`'s inline feature bootstrap to allocate feature IDs (e.g. F0001)
 feature_id_digits: 4
 
 # Which files `lv bootstrap`/`lv init` read from the target repo.
@@ -111,28 +108,29 @@ docs/
       overview.md                 # current state of the feature
       design.md                   # architecture, data model, API contract
   changes/
-    <ticket-id>/
-      01-analysis.md              # requirement analysis document
-      02-plan.md                  # implementation plan document
-      state.yaml                  # workflow state (single source of truth)
+    <change-id>/
+      state.yaml                  # ticket/description context for OpenSpec (LV's only artifact here)
+
+openspec/
+  changes/<change-id>/            # proposal.md, specs/, design.md, tasks.md — owned by OpenSpec
 ```
+
+`<change-id>` is a ticket ID for ticket-based starts, or a slug derived from the description for description-based ones — the same name identifies both `docs/changes/<change-id>/` and the OpenSpec change under `openspec/changes/<change-id>/`.
 
 ## Commands
 
-### `lv init <doc-paths...>`
+### `lv init [--tool <tool>]`
 
-Analyze requirement documents (BRD/SRD/SSD, UI design/prototype references) and split them into features.
+Install and configure [OpenSpec](https://github.com/Fission-AI/OpenSpec) for a coding agent, wired to LV's context.
 
 ```bash
-lv init docs/requirements/checkout-brd.pdf docs/requirements/checkout-srd.md
-lv init requirements.md https://figma.com/file/xxx   # a URL is recorded as an unfetched reference
+lv init --tool claude   # install/configure OpenSpec for Claude Code
+lv init                 # no --tool — OpenSpec's own interactive prompt runs
 ```
 
-- Accepts `.md`, `.txt`, `.pdf`, `.docx`, `.html`/`.htm`, or a URL (not fetched, cited as a reference)
-- Splits the combined input into distinct features and allocates a fresh `Fxxxx` ID per feature (`--id-prefix`/`--id-digits` override `.lv.yaml`'s defaults for one run)
-- Writes a requirements-derived draft `docs/features/<id>/overview.md` per feature (purpose, scope, constraints, source references — no code involved yet) and updates `docs/features/INDEX.md`
-- **Does not commit** — engineer reviews and commits manually
-- Next step: `lv bootstrap <feature-id>` for each new ID, to ground the draft in code
+- Delegates entirely to the OpenSpec CLI (`openspec init --tools <tool>`) — `lv` does not hardcode a list of supported coding agents; whatever `openspec init --help` supports, `--tool` accepts
+- Idempotently appends a pointer to OpenSpec's project-wide `context:` (`openspec/config.yaml`) naming `docs/features/<feature-id>/{overview.md,design.md}` and the current change's `docs/changes/<change-id>/state.yaml`, so OpenSpec's explore/propose/apply workflows load them automatically instead of you pasting them into every prompt
+- Run once per repo (re-running is safe — both the OpenSpec install and the context pointer are idempotent)
 
 ### `lv bootstrap <feature-id> [--paths <paths>] [--name <name>] [--description <description>]`
 
@@ -153,61 +151,33 @@ Both modes:
 - Update `docs/features/INDEX.md`
 - **Do not commit** — engineer reviews and commits manually
 
-### `lv start <ticket-id> [--type <type>]`
+### `lv start <ticket-id> [--type <type>]` / `lv start --description "<text>" [--type <type>]`
 
-Start a new ticket.
+Start a new change, from a Lark ticket or from free text.
 
 ```bash
-lv start PROJ-123               # e.g. feature/PROJ-123-fix-login-bug (title slug from Lark)
-lv start PROJ-123 --type hotfix # e.g. hotfix/PROJ-123-fix-login-bug
+lv start PROJ-123                                  # fetch PROJ-123 from Lark Base
+lv start PROJ-123 --type hotfix                    # e.g. hotfix/PROJ-123-fix-login-bug
+lv start --description "Let support issue refunds" # no Lark ticket — change-id slugified from the text
 ```
 
-- Fetches the record from Lark Base
-- Validates that the feature ID exists in `docs/features/`
+By ticket ID:
+- Fetches the record from Lark Base; feature IDs with no `docs/features/<id>/` yet are bootstrapped inline (see `lv bootstrap`'s autonomous-scan mode) with a human review gate before continuing
 - Creates the branch (named per `--type`'s pattern in `.lv.yaml`'s `branch_types`, or `default_branch_type` if omitted, with `{summary}` filled in from the ticket title) from the default branch
-- Generates `01-analysis.md` with open questions
+- Writes `docs/changes/<ticket-id>/state.yaml` with the ticket's title, description, and feature IDs — this is LV's only artifact for the change; no analysis document is generated
 - Commits and pushes the branch
 
-### `lv answer`
+By description:
+- No Lark fetch — the change-id is a slug of a short title derived from the description's first line
+- Creates the branch the same way, using the change-id in place of a ticket ID
+- Writes `docs/changes/<change-id>/state.yaml` with the same shape, `description` set and `ticket_id` omitted
+- Commits and pushes the branch
 
-Opens the current document in the editor for the engineer to answer questions, then the agent updates the document.
-
-```bash
-lv answer
-```
-
-- Opens `$EDITOR` (fallback: `notepad` on Windows, `vi` on Unix)
-- After the editor closes, the agent re-reads and updates the document
-- Commits the result
-- Can be run multiple times until all questions are resolved
-
-### `lv approve`
-
-Lock the current step.
-
-```bash
-lv approve
-```
-
-- Sets `status: approved` in `state.yaml`
-- Commits state and artifact in the same commit
-- Prints the next command to run
-
-### `lv design`
-
-Generate the implementation plan document. Only runs after analysis has been approved.
-
-```bash
-lv design
-```
-
-- Loads context: feature docs + approved `01-analysis.md`
-- Generates `02-plan.md`, sized to the ticket (terse for a minor fix/bug, fuller for a feature), with open questions
-- Commits the result
+Either way, continue with your coding agent's OpenSpec workflow (e.g. `/opsx:propose`) — it reads `docs/features/` and this `state.yaml` automatically once `lv init` has wired the context pointer.
 
 ### `lv resume [ticket-id]`
 
-Pick a ticket back up — figures out what to do next instead of you having to check `lv status` and remember which command comes next.
+Check out a change's branch and print its `state.yaml` context — for picking a change back up after a break, or on a different machine.
 
 ```bash
 lv resume            # uses the current branch
@@ -215,40 +185,32 @@ lv resume PROJ-123   # finds and checks out PROJ-123's branch, whatever type it 
 ```
 
 - Recognizes a branch under any configured type (`feature/PROJ-123-...`, `hotfix/PROJ-123-...`, ...), not just the default
-- Given a ticket ID: finds all its branches across every type (local and remote) by ticket ID alone, ignoring the `{summary}` suffix; one match checks it out directly, multiple matches asks you to pick, no matches means the ticket was never started (`lv start` first)
-- Given no ticket ID and the current branch isn't a ticket branch: lists every ticket branch found (any type) and asks which one to resume, instead of just failing
-- Reads `state.yaml` for the ticket and acts on the current step's status:
-  - **in progress** (doc generated, may have open questions): shows the doc path and asks `Approve '<step>' now? [y/N]` — `y` runs the same thing as `lv approve`, `n` tells you to run `lv answer`
-  - **approved, more steps left** (e.g. analysis approved): runs the next step's generation itself (e.g. `lv design`) and stops there for you to review
-  - **approved, last step**: prints that the ticket is fully approved and ready for an MR
-- Never auto-approves — only ever asks
+- Given a ticket ID: finds all its branches across every type (local and remote) by ticket ID alone, ignoring the `{summary}` suffix; one match checks it out directly, multiple matches asks you to pick, no matches falls back to the default type's rendered name
+- Given no ticket ID and the current branch isn't a change branch: lists every change branch found (any type) and asks which one to resume, instead of just failing
+- Prints the resolved change's `state.yaml` summary and a reminder to continue via your coding agent's OpenSpec workflow
 
 ### `lv status`
 
-Print the current state of the ticket.
+Print the current change's `state.yaml` context.
 
 ```bash
 lv status
 ```
 
 ```
-Ticket:    PROJ-123
-Features:  checkout-flow
-Branch:    feature/PROJ-123-checkout-redesign
-Step:      design
-
-Steps:
-  analysis   approved     iter=3  tokens=12,400  8.2s  model=openai/gpt-4o
-  design     in_progress  iter=1  tokens=4,100   3.5s  model=openai/gpt-4o
+Change:      PROJ-123
+Ticket:      PROJ-123
+Title:       Fix login redirect loop
+Description: Users get bounced back to /login after a successful SSO callback.
+Features:    checkout-flow
+Branch:      feature/PROJ-123-fix-login-redirect-loop
+Created:     2026-08-26T09:02:00.000Z
+Version:     0.1.0
 ```
 
 ## Prerequisites to start a ticket
 
-The Lark Base record must have:
-- A value in the Feature ID column (column name declared in `.lv.yaml`)
-- A Feature ID that points to an existing directory in `docs/features/`
-
-If the feature has no docs yet, run `lv init` (from requirement docs) or `lv bootstrap` (from existing code) first.
+For a ticket-based `lv start`, the Lark Base record's Feature ID field is optional — an empty field or a feature with no `docs/features/<id>/` directory is bootstrapped inline rather than treated as an error.
 
 ## Tracing
 
