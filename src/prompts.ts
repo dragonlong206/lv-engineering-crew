@@ -126,7 +126,7 @@ export const CONTEXT_POINTER = CONTEXT_POINTER_LINES.join("\n");
 // (`openspec instructions archive --change <name> --json`'s `operationGuidance` field) and
 // followed advisorily, never blocking the archive if ignored.
 export const ARCHIVE_GUIDANCE =
-  "Before completing this archive, for each feature ID recorded in this change, run `lv bootstrap <feature-id>` to refresh that feature's docs against the code this change shipped.";
+  "Before completing this archive, refresh the docs of every feature this change touches by running `lv bootstrap <feature-id>`: use the feature IDs recorded in this change's `docs/changes/<change-id>/state.yaml` when present; otherwise, for each of this change's delta spec capability paths, treat its leading path segment as a feature ID and refresh it if a matching `docs/features/<id>/` directory exists.";
 
 export function buildBootstrapScanPrompt(
   featureId: string,
