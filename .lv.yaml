@@ -2,11 +2,21 @@ lark:
   base_id: "xxx"
   table_id: "xxx"
   feature_id_field: "Feature ID" # column name for feature IDs in Lark Base
-  title_field: "Title"           # column name used as the ticket title (branch {summary}, analysis prompt)
+  title_field: "Title" # column name used as the ticket title (branch {summary}, analysis prompt)
+
   # Whether `lv start` writes a feature ID it allocates for a brand-new feature
   # back to the ticket's Feature ID field above. Requires the app's tenant token
   # to carry Bitable write scope. Default true; set false to keep allocations local-only.
   # sync_feature_id: true
+
+  # Table (in the same Base) to record every newly created feature in. Unset skips
+  # the Features-table sync entirely, regardless of sync_new_features below.
+  # features_table_id: "xxx"
+
+  # Whether `lv bootstrap`/`lv start` create a record in features_table_id for a
+  # brand-new feature. Requires the app's tenant token to carry Bitable write scope.
+  # Default true; set false to keep new features local-only.
+  # sync_new_features: true
 
 default_branch: main
 

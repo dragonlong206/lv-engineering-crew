@@ -22,6 +22,12 @@ export const LarkConfigSchema = z.object({
   // Whether `lv start` writes a newly allocated feature ID back to the ticket's
   // Feature ID field. Requires the app's tenant token to carry Bitable write scope.
   sync_feature_id: z.boolean().default(true),
+  // Table in the same Lark Base to record every newly created feature in. Unset skips the
+  // Features-table sync entirely, regardless of `sync_new_features`.
+  features_table_id: z.string().optional(),
+  // Whether `lv bootstrap`/`lv start` create a record in `features_table_id` for a brand-new
+  // feature. Requires the app's tenant token to carry Bitable write scope.
+  sync_new_features: z.boolean().default(true),
 });
 
 export const ModelsConfigSchema = z.object({

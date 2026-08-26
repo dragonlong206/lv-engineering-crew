@@ -10,6 +10,7 @@ import {
   fetchTicket,
   getTenantAccessToken,
   updateTicketFeatureId,
+  syncFeatureToLarkTable,
 } from "../tools/lark.js";
 import { createBranch, commitAll, push } from "../integrations/git/client.js";
 import { writeState } from "../engine/state-io.js";
@@ -26,10 +27,11 @@ import {
   printError,
   printWarn,
   confirm,
+  confirmFeatureSplit,
   extractText,
   extractJson,
 } from "./helpers.js";
-import { buildFeatureMatchPrompt } from "../prompts.js";
+import { buildFeatureMatchPrompt, buildFeatureSplitPrompt } from "../prompts.js";
 import { LV_VERSION, type Config, type State } from "../types.js";
 
 const featureMatchAgent = new Agent({
@@ -38,6 +40,14 @@ const featureMatchAgent = new Agent({
   model: "openai/gpt-4o-mini",
   instructions:
     "You are an assistant that matches project changes to existing features. Follow the user's prompt exactly and return only strict JSON — no surrounding text.",
+});
+
+const featureSplitAgent = new Agent({
+  id: "lv-feature-split-agent",
+  name: "LV Feature Split Agent",
+  model: "openai/gpt-4o-mini",
+  instructions:
+    "You are an assistant that splits a project change into the distinct new features it introduces. Follow the user's prompt exactly and return only strict JSON — no surrounding text.",
 });
 
 /**
@@ -69,6 +79,28 @@ async function matchExistingFeature(
   if (!featureId) return undefined;
 
   return candidates.find((c) => c.id === featureId);
+}
+
+/**
+ * Infers how many distinct new features a change with no confirmed existing-feature match
+ * implies, so `lv start` can offer the engineer a set to confirm instead of always allocating
+ * exactly one. Always returns at least one entry — falls back to a single feature titled after
+ * the change if the model returns an empty list.
+ */
+async function inferFeatureSplit(
+  config: Config,
+  title: string,
+  description: string,
+): Promise<{ title: string }[]> {
+  const model = getModelForStep(config, "bootstrap");
+  const result = await featureSplitAgent.generate(
+    buildFeatureSplitPrompt(title, description),
+    { model },
+  );
+  const { features } = extractJson<{ features: { title: string }[] }>(
+    extractText(result),
+  );
+  return features.length > 0 ? features : [{ title }];
 }
 
 /** First non-empty line of a feature's overview.md, for a short human-readable summary. */
@@ -141,11 +173,12 @@ async function startFromTicket(
     summary: ticket.title,
   });
 
-  // A ticket with no Feature ID yet is treated as introducing exactly one new feature —
-  // allocate an ID for it now rather than requiring it to be set in Lark first. But first,
-  // check whether it's actually more work on a feature that already exists.
+  // A ticket with no Feature ID yet is treated as introducing one or more new features —
+  // allocate IDs for them now rather than requiring the ticket to be set in Lark first. But
+  // first, check whether it's actually more work on a feature that already exists.
   let featureIds = ticket.featureIds;
-  let newlyAllocatedFeatureId: string | undefined;
+  let newlyAllocatedFeatureIds: string[] = [];
+  const newFeatureTitles = new Map<string, string>();
 
   if (featureIds.length === 0) {
     printInfo(
@@ -169,15 +202,24 @@ async function startFromTicket(
       printInfo(`Using existing feature ${matched.id}.`);
       featureIds = [matched.id];
     } else {
-      const [allocated] = allocateFeatureIds(
+      const inferred = await inferFeatureSplit(
+        config,
+        ticket.title,
+        ticket.description,
+      );
+      const confirmedTitles = await confirmFeatureSplit(inferred);
+      const allocated = allocateFeatureIds(
         repoRoot,
-        1,
+        confirmedTitles.length,
         config.feature_id_prefix,
         config.feature_id_digits,
       );
-      printInfo(`No match, allocated new feature ${allocated}.`);
-      featureIds = [allocated];
-      newlyAllocatedFeatureId = allocated;
+      printInfo(
+        `No match, allocated new feature${allocated.length > 1 ? "s" : ""} ${allocated.join(", ")}.`,
+      );
+      featureIds = allocated;
+      newlyAllocatedFeatureIds = allocated;
+      allocated.forEach((id, i) => newFeatureTitles.set(id, confirmedTitles[i]));
     }
   }
 
@@ -197,7 +239,7 @@ async function startFromTicket(
       );
       generated.push(
         await generateFeatureDocsFromScan(config, repoRoot, featureId, {
-          name: ticket.title,
+          name: newFeatureTitles.get(featureId) ?? ticket.title,
           description: ticket.description,
         }),
       );
@@ -218,31 +260,41 @@ async function startFromTicket(
       );
       return;
     }
+
+    for (const featureId of missingFeatureIds) {
+      await syncFeatureToLarkTable(
+        config,
+        larkToken,
+        featureId,
+        newFeatureTitles.get(featureId) ?? ticket.title,
+        ticket,
+      );
+    }
   }
 
-  if (newlyAllocatedFeatureId) {
+  if (newlyAllocatedFeatureIds.length > 0) {
     if (config.lark.sync_feature_id) {
       try {
         await updateTicketFeatureId(
           ticket,
-          newlyAllocatedFeatureId,
+          newlyAllocatedFeatureIds,
           config.lark.base_id,
           config.lark.table_id,
           config.lark.feature_id_field,
           larkToken,
         );
         printSuccess(
-          `Synced feature ${newlyAllocatedFeatureId} back to Lark ticket ${ticketId}.`,
+          `Synced feature${newlyAllocatedFeatureIds.length > 1 ? "s" : ""} ${newlyAllocatedFeatureIds.join(", ")} back to Lark ticket ${ticketId}.`,
         );
       } catch (err) {
         printWarn(
-          `Failed to sync feature ${newlyAllocatedFeatureId} back to Lark: ${(err as Error).message}. ` +
-            `Continuing — the allocation is local-only.`,
+          `Failed to sync feature${newlyAllocatedFeatureIds.length > 1 ? "s" : ""} ${newlyAllocatedFeatureIds.join(", ")} back to Lark: ${(err as Error).message}. ` +
+            `Continuing — the allocation${newlyAllocatedFeatureIds.length > 1 ? "s are" : " is"} local-only.`,
         );
       }
     } else {
       printInfo(
-        `Lark sync disabled (lark.sync_feature_id: false) — ${newlyAllocatedFeatureId} is local-only.`,
+        `Lark sync disabled (lark.sync_feature_id: false) — ${newlyAllocatedFeatureIds.join(", ")} ${newlyAllocatedFeatureIds.length > 1 ? "are" : "is"} local-only.`,
       );
     }
   }

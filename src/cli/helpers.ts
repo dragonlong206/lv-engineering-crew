@@ -25,6 +25,38 @@ export async function promptSelect(question: string, options: string[]): Promise
   return options[choice - 1];
 }
 
+/**
+ * Prints the inferred new-feature titles and lets the engineer accept them as-is (Enter) or
+ * replace the whole list with a comma-separated set of titles. Returns the confirmed titles —
+ * never empty: a blank or all-commas reply falls back to the inferred list rather than
+ * allocating zero features.
+ */
+export async function confirmFeatureSplit(
+  inferred: { title: string }[],
+): Promise<string[]> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+  console.log(
+    inferred.length > 1
+      ? `This looks like it introduces ${inferred.length} features:`
+      : `This looks like it introduces 1 feature:`,
+  );
+  inferred.forEach((f, i) => console.log(`  ${i + 1}) ${f.title}`));
+
+  const answer = await rl.question(
+    `Press Enter to accept, or type a comma-separated list of titles to replace it: `,
+  );
+  rl.close();
+
+  const replaced = answer
+    .trim()
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  return replaced.length > 0 ? replaced : inferred.map((f) => f.title);
+}
+
 export function openEditor(filePath: string): void {
   const editor =
     process.env['EDITOR'] ??

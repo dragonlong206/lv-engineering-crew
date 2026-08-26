@@ -104,6 +104,27 @@ Return ONLY strict JSON matching this shape — no surrounding text, no code fen
 }
 
 // ---------------------------------------------------------------------------
+// Start — split a ticket with no Feature ID into one or more new features
+// ---------------------------------------------------------------------------
+
+export function buildFeatureSplitPrompt(
+  title: string,
+  description: string,
+): string {
+  return `You are splitting a project change into the distinct new features it introduces, so each can get its own feature ID and docs.
+
+## Change
+
+Title: ${title}
+Description: ${description || "(none)"}
+
+Decide how many distinct, separately-shippable features this change introduces. Most changes introduce exactly one — only split into more than one when the title/description clearly describes unrelated pieces of work, not just multiple steps or aspects of the same feature. Give each feature a short, specific title.
+
+Return ONLY strict JSON matching this shape — no surrounding text, no code fences, at least one entry:
+{"features": [{"title": "<short feature title>"}]}`;
+}
+
+// ---------------------------------------------------------------------------
 // OpenSpec init — instructional text written into openspec/config.yaml
 // ---------------------------------------------------------------------------
 
