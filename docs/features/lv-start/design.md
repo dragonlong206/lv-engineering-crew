@@ -24,7 +24,7 @@ The flow is mostly linear. Ticket-based starts validate Lark credentials, fetch 
 
 ### Lark ticket data
 
-`src/tools/lark.ts` exposes an internal ticket shape:
+`src/tools/lark.ts` exposes a ticket shape with these fields:
 
 - `id`
 - `title`
@@ -38,7 +38,7 @@ Feature IDs are read from the configured Lark feature field as either a comma-se
 
 `src/types.ts` defines `StateSchema`, which is written to `docs/changes/<change-id>/state.yaml` by `src/engine/state-io.ts`. For `lv start`, the state includes:
 
-- `ticket_id` for ticket-based starts, optional for description-based starts
+- `ticket_id` for ticket-based starts, omitted for description-based starts
 - `title`
 - `description`
 - `feature_ids`

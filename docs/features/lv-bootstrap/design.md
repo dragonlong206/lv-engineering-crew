@@ -28,12 +28,11 @@ followed by the file contents in a fenced code block.
 The feature directory contains these files:
 - `docs/features/<feature-id>/overview.md`
 - `docs/features/<feature-id>/design.md`
-- `docs/features/<feature-id>/requirements.md`
 
 ### Autonomous scan output
 The scan agent must return strict JSON with these keys:
 ```json
-{"overviewMarkdown":"...","designMarkdown":"...","requirementsMarkdown":"..."}
+{"overviewMarkdown":"...","designMarkdown":"..."}
 ```
 
 ## APIs / Interfaces
@@ -48,6 +47,11 @@ The scan agent must return strict JSON with these keys:
 - `runBootstrap(featureId: string, pathsArg?: string, hint?: BootstrapScanHint): Promise<void>`
   - Routes to path-based generation when `pathsArg` is provided, otherwise to autonomous scan mode.
 
+### Scan bootstrap helper
+- `generateFeatureDocsFromScan(config: Config, repoRoot: string, featureId: string, hint?: BootstrapScanHint): Promise<GeneratedFeatureDocs>`
+  - Performs the autonomous scan flow without CLI printing.
+  - Returns the feature directory and the written overview and design paths.
+
 ### Index maintenance interface
 - `updateIndex(repoRoot: string, featureId: string): void`
   - Creates `docs/features/INDEX.md` if missing.
@@ -56,7 +60,8 @@ The scan agent must return strict JSON with these keys:
 ## Key Design Decisions
 1. **Two generation strategies**: The command supports both deterministic path-based input and autonomous repo scanning, which makes it useful for both targeted documentation and discovery-driven refinement.
 2. **Separate agents for separate jobs**: Path-based generation uses a simple inline agent, while scan mode uses a factory-created agent with tools so it can inspect the repository interactively.
-3. **Explicit reuse of draft docs**: Scan mode includes any existing overview, design, or requirements drafts in the prompt so the model can verify and refine them.
+3. **Explicit reuse of draft docs**: Scan mode includes any existing overview or design drafts in the prompt so the model can verify and refine them.
 4. **Shared output convention**: Both modes write to the same feature directory layout and prepend the same auto-generated header.
 5. **Index file maintenance**: `INDEX.md` is updated automatically to keep feature documentation discoverable.
 6. **Config-driven model selection**: Both generation paths use `getModelForStep(config, "bootstrap")`, allowing the bootstrap model to be overridden in configuration.
+7. **Tool limits are encapsulated in the tooling layer**: code discovery is restricted by configured extension and skip-directory lists, and search results are capped to keep exploration bounded.

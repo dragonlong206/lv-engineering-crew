@@ -1,18 +1,32 @@
+<!-- AUTO-GENERATED — not yet verified. Review and edit before committing. -->
+
 # lv init
 
-Analyzes one or more requirement documents (BRD/SRD/SSD, plain text, PDF, DOCX, or an HTML prototype; a Figma-style URL is accepted as an unfetched reference) and splits them into distinct features. Allocates a fresh `Fxxxx`-style feature ID for each and writes a requirements-derived draft `overview.md` — no code involved yet. Run `lv bootstrap <feature-id>` afterward to ground each draft in the actual codebase.
+Installs and configures OpenSpec for a chosen coding agent, then wires OpenSpec’s generated workflows to LV’s context files. It is the repo’s entry point for setting up the OpenSpec integration, not for analyzing requirement documents or allocating feature IDs.
 
-## Main code
+## Main components
 
-- `src/cli/init.ts` — reads/dispatches input docs, calls the init agent, allocates IDs, writes drafts
-- `src/tools/doc-readers.ts` — per-extension document loaders (md/txt/pdf/docx/html) + URL detection
-- `src/engine/feature-id.ts` — `allocateFeatureIds`, scans `docs/features/` for the highest existing `Fxxxx` and continues from there
-- `src/prompts.ts` — `buildInitPrompt`
+- `src/cli/init.ts` runs the install step and patches `openspec/config.yaml`.
+- `src/index.ts` exposes the `lv init` command and its `--tool` option.
+- `src/prompts.ts` provides the static context text that `lv init` writes into OpenSpec config.
 
-## Flow
+## High-level flow
 
-1. Read each input path (or record it as an unfetched reference if it's a URL) into a labeled document block
-2. `initAgent.generate()` → strict JSON: one `{title, overviewMarkdown, sourceRefs}` per identified feature
-3. `allocateFeatureIds()` → one new `Fxxxx` ID per feature
-4. Write `docs/features/<id>/overview.md` for each, update `INDEX.md`
-5. No auto-commit — review, edit, then run `lv bootstrap <id>` next
+1. `lv init` determines the repository root.
+2. It runs `openspec init` in that repo, passing `--tools <tool>` when `--tool` is supplied.
+3. After installation, it updates `openspec/config.yaml` with two idempotent additions:
+   - a `context:` pointer that tells OpenSpec where to find LV feature docs and change state
+   - `operations.archive.guidance` that tells archive workflows to refresh feature docs before finishing
+4. It prints a success message and suggests starting a change with `lv start`.
+
+## Constraints and assumptions
+
+- `lv init` depends on the `openspec` executable being available on the PATH.
+- The `--tool` option is optional; when omitted, OpenSpec’s own interactive selection is used.
+- The config edits are written to `openspec/config.yaml` and are designed to be idempotent.
+- The implementation preserves the scaffolded OpenSpec comments when possible by appending to a fresh template instead of always round-tripping through YAML.
+- If `openspec/config.yaml` is missing after install, the command logs an error and returns from the config patching step.
+
+## Current state of the code
+
+The command is implemented and wired into the CLI. It no longer reads requirement documents, does not invoke an LLM, does not allocate `Fxxxx` feature IDs, and does not write `docs/features/<id>/overview.md`. The remaining behavior is limited to OpenSpec installation plus config-file wiring.

@@ -1,33 +1,42 @@
 <!-- AUTO-GENERATED — not yet verified. Review and edit before committing. -->
 
+<!-- AUTO-GENERATED — verified against the current codebase. -->
+
 # lv resume
 
 ## Architecture and layers
 
-`lv resume` is a thin CLI orchestrator over existing ticket workflow primitives.
+`lv resume` is a thin CLI orchestrator built on existing branch, git, and state helpers.
 
-- CLI layer: `src/index.ts` exposes the command, and `src/cli/resume.ts` coordinates the workflow.
-- Branch layer: `src/engine/branch-naming.ts` is used to recognize ticket branches and to render a branch name when only a ticket ID is known.
-- Git layer: `src/integrations/git/client.ts` is used to enumerate branches and check out the resolved branch.
-- State layer: `src/engine/state-io.ts` reads the persisted ticket state, and `src/engine/state-machine.ts` determines the active step.
-- Action layer: `src/cli/approve.ts` and `src/cli/design.ts` are reused rather than reimplemented.
+- CLI layer: `src/index.ts` exposes the command, and `src/cli/resume.ts` coordinates the whole flow.
+- Branch layer: `src/engine/branch-naming.ts` interprets configured branch patterns, extracts ticket IDs, and renders fallback branch names.
+- Git layer: `src/integrations/git/client.ts` lists candidate branches, detects the current branch, and checks out the resolved branch.
+- State layer: `src/engine/state-io.ts` loads the persisted change state from disk.
+- Presentation layer: `src/cli/status.ts` supplies `printStateSummary()` so `resume` can reuse the same output format as `status`.
+- Interaction layer: `src/cli/helpers.ts` provides prompt-based selection when branch resolution is ambiguous.
 
 ## Data model / schema
 
-The command reads the persisted ticket state for the resolved ticket ID and inspects the current step record.
+The command reads the persisted change state from `docs/changes/<change-id>/state.yaml`.
 
-Relevant state facts observed in the code:
+The state schema, as defined in `src/types.ts`, contains:
 
-- The state contains a `steps` map keyed by step name.
-- Each step record has a `status` field.
-- `lv resume` distinguishes at least these statuses: `pending`, `in_progress`, and `approved`.
-- The current step name is obtained from the state machine, not inferred directly from the filesystem.
+- `ticket_id` as an optional string
+- `title` as a string
+- `description` as a string
+- `feature_ids` as a string array
+- `branch` as a string
+- `created_at` as a string
+- `lv_version` as a string
 
-The command also relies on branch name patterns from configuration:
+`lv resume` does not inspect step-by-step workflow records. It only parses the whole change state and prints it through `printStateSummary()`.
 
-- Branch types are configured in `.lv.yaml` through `branch_types` and `default_branch_type`.
-- Ticket IDs are extracted from branches using configured patterns.
-- Summary text in branch names is optional when parsing and omitted when rendering a fallback name.
+Branch naming is driven by configuration:
+
+- `.lv.yaml` may define `branch_types` as a map from type name to pattern.
+- `.lv.yaml` may define `default_branch_type`, which is used when rendering a fallback branch name.
+- If `branch_types` is omitted, the built-in defaults from `src/engine/branch-naming.ts` are used.
+- Branch patterns use `{ticket_id}` and `{summary}` placeholders.
 
 ## APIs / interfaces
 
@@ -35,27 +44,29 @@ The command also relies on branch name patterns from configuration:
 
 - `lv resume [ticket-id]`
 
-Behavioral shape:
+Behavior:
 
-- With no argument, use the current branch if it matches a ticket branch.
-- With no argument on a non-ticket branch, prompt the user to choose from available ticket branches.
-- With a ticket ID, search across configured branch types for matching branches.
+- No argument: resume the current change if the current branch matches a configured change branch.
+- No argument on a non-change branch: prompt the user to choose from all matching change branches.
+- With a ticket ID: search all configured branch types for branches whose parsed ticket ID matches the argument.
 
-### Internal interfaces used
+### Internal functions used
 
-- `runResume(ticketId?: string): Promise<void>` in `src/cli/resume.ts`.
-- `matchBranch(config, branchName)` returns a branch type and ticket ID when a branch matches.
-- `branchGlobs(config)` returns glob patterns for listing candidate branches.
-- `renderBranchName(config, ticketId)` renders the fallback branch name when no branch exists yet.
-- `checkoutBranch(repoRoot, branchName)` checks out an existing branch, or fetches and tracks it from `origin` if needed.
-- `confirm(question)` asks for a yes/no decision.
-- `promptSelect(question, options)` prompts the user to choose one branch from a numbered list.
+- `runResume(ticketId?: string): Promise<void>` in `src/cli/resume.ts`
+- `matchBranch(config, branchName)` in `src/engine/branch-naming.ts`
+- `branchGlobs(config)` in `src/engine/branch-naming.ts`
+- `renderBranchName(config, ticketId)` in `src/engine/branch-naming.ts`
+- `currentBranch(repoRoot)` in `src/integrations/git/client.ts`
+- `listBranchesMatching(repoRoot, globs)` in `src/integrations/git/client.ts`
+- `checkoutBranch(repoRoot, branchName)` in `src/integrations/git/client.ts`
+- `readState(repoRoot, changeId)` in `src/engine/state-io.ts`
+- `printStateSummary(changeId, state)` in `src/cli/status.ts`
 
 ## Key design decisions
 
-- Resume is a dispatcher, not a new workflow step. It reuses the existing approve and design commands.
-- Branch resolution is ticket-ID centric. When multiple branch types exist, the command can still find the ticket by matching only the ticket ID portion.
-- The command prefers safe automation. It may generate the next document automatically when the workflow is already approved, but it never approves a step without explicit confirmation.
-- Fallback checkout is best-effort. If a requested ticket ID has no matching branch, the command derives the default branch name and lets git report failure if that branch is absent.
-- Branch selection is interactive only when needed, keeping the common path of resuming the current ticket branch simple.
-- Existing git helper behavior is reused, including remote-tracking checkout when a branch is not present locally.
+- Resume is branch-first, not state-first. It resolves a change branch before loading any state.
+- Matching is ticket-ID centric. Summary text in a branch name is ignored for selection.
+- The command is forgiving when a requested branch is not local. It will fetch and track from `origin` if possible.
+- Ambiguity is handled interactively rather than by guessing, which keeps the command safe when multiple branch types point at the same ticket.
+- The fallback branch name is derived from the configured default branch type, using only the ticket ID because no title is available at resume time.
+- Output reuse is intentional: `resume` prints the same state summary format as `status` instead of maintaining a second presentation path.
