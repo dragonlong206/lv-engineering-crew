@@ -264,8 +264,6 @@ async function startFromTicket(
 
   await commitAll(repoRoot, `lv: start ${ticketId} — change context`);
 
-  await pushBranch(repoRoot, branchName);
-
   printSuccess(`Started ticket ${ticketId}`);
   printNextSteps(ticketId);
 }
@@ -317,22 +315,8 @@ async function startFromDescription(
 
   await commitAll(repoRoot, `lv: start ${changeId} — change context`);
 
-  await pushBranch(repoRoot, branchName);
-
   printSuccess(`Started change ${changeId}`);
   printNextSteps(changeId);
-}
-
-async function pushBranch(repoRoot: string, branchName: string): Promise<void> {
-  try {
-    printInfo(`Pushing branch ${branchName}...`);
-    await push(repoRoot, branchName);
-    printSuccess(`Branch pushed.`);
-  } catch {
-    printError(
-      "Push failed — no remote configured or no network. Commit is local.",
-    );
-  }
 }
 
 function printNextSteps(changeId: string): void {
