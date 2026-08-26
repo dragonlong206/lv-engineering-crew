@@ -104,6 +104,27 @@ Return ONLY strict JSON matching this shape — no surrounding text, no code fen
 }
 
 // ---------------------------------------------------------------------------
+// Start — split a ticket with no Feature ID into one or more new features
+// ---------------------------------------------------------------------------
+
+export function buildFeatureSplitPrompt(
+  title: string,
+  description: string,
+): string {
+  return `You are splitting a project change into the distinct new features it introduces, so each can get its own feature ID and docs.
+
+## Change
+
+Title: ${title}
+Description: ${description || "(none)"}
+
+Decide how many distinct, separately-shippable features this change introduces. Most changes introduce exactly one — only split into more than one when the title/description clearly describes unrelated pieces of work, not just multiple steps or aspects of the same feature. Give each feature a short, specific title.
+
+Return ONLY strict JSON matching this shape — no surrounding text, no code fences, at least one entry:
+{"features": [{"title": "<short feature title>"}]}`;
+}
+
+// ---------------------------------------------------------------------------
 // OpenSpec init — instructional text written into openspec/config.yaml
 // ---------------------------------------------------------------------------
 
@@ -127,6 +148,14 @@ export const CONTEXT_POINTER = CONTEXT_POINTER_LINES.join("\n");
 // followed advisorily, never blocking the archive if ignored.
 export const ARCHIVE_GUIDANCE =
   "Before completing this archive, refresh the docs of every feature this change touches by running `lv bootstrap <feature-id>`: use the feature IDs recorded in this change's `docs/changes/<change-id>/state.yaml` when present; otherwise, for each of this change's delta spec capability paths, treat its leading path segment as a feature ID and refresh it if a matching `docs/features/<id>/` directory exists.";
+
+// Patched into the generated `/opsx:propose` workflow file(s) by `addProposeStateAutoload()`
+// in init.ts, as a new line inserted right before that workflow's "ask the user" step. The
+// `context:` pointer above can't do this job itself — it's only surfaced once an artifact's
+// `openspec instructions` is read, which happens after the workflow's Step 1 (deciding the
+// change name/description) has already run.
+export const PROPOSE_STATE_AUTOLOAD_LINE =
+  "LV Crew: before asking, check for a `docs/changes/<change-id>/state.yaml` whose `branch` field matches the current git branch. If one exists, use its `title` to derive the kebab-case change name and its `description` as the change description below, skipping the question entirely. Only ask the user if no matching `state.yaml` exists, or it has no usable title/description.";
 
 export function buildBootstrapScanPrompt(
   featureId: string,

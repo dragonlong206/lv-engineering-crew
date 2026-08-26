@@ -1,7 +1,17 @@
 # Copy this file to .lv.local.yaml and fill in real credentials.
 # .lv.local.yaml is gitignored — never commit it.
 
-lark_app_id: cli_xxx
-lark_app_secret: xxx
-openai_api_key: sk-xxx
-# anthropic_api_key: sk-ant-xxx  # only needed if using Anthropic models
+# Copy this file to .lv.local.yaml and fill in real credentials.
+# .lv.local.yaml is gitignored — never commit it.
+lark:
+  base_id: "replaced_by_real_id"
+  table_id: "replaced_by_real_id"
+  feature_id_field: "Feature IDs"
+  title_field: "Task name"
+  sync_new_features: true # Default is true
+  features_table_id: "replaced_by_real_id" # only needed if sync_new_features = true
+
+lark_app_id: cli_xxxx
+lark_app_secret: xxxx
+openai_api_key: sk-proj-xxxx
+# anthropic_api_key: sk-ant-xxxx  # only needed if using Anthropic models

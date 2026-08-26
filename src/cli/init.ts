@@ -4,7 +4,11 @@ import yaml from "js-yaml";
 import { execa } from "execa";
 import { getRepoRoot } from "../config.js";
 import { printInfo, printSuccess, printError, confirm } from "./helpers.js";
-import { CONTEXT_POINTER_LINES, ARCHIVE_GUIDANCE } from "../prompts.js";
+import {
+  CONTEXT_POINTER_LINES,
+  ARCHIVE_GUIDANCE,
+  PROPOSE_STATE_AUTOLOAD_LINE,
+} from "../prompts.js";
 
 export interface InitOptions {
   tool?: string;
@@ -64,6 +68,7 @@ export async function runInit(opts: InitOptions): Promise<void> {
 
   addContextPointer(repoRoot);
   addArchiveGuidance(repoRoot);
+  addProposeStateAutoload(repoRoot);
 
   printSuccess("OpenSpec installed and wired to LV context.");
   console.log(`\nNext: run 'lv start <ticket-id>' or 'lv start --description "..."' to begin a change.`);
@@ -162,4 +167,55 @@ function addArchiveGuidance(repoRoot: string): void {
   parsed.operations = operations;
 
   fs.writeFileSync(configPath, yaml.dump(parsed, { indent: 2 }), "utf-8");
+}
+
+// Every location `openspec init`/`openspec update` is known to generate a `/opsx:propose`
+// workflow file at, across the tools this repo has installed. A tool this repo hasn't
+// installed simply won't have the file, so each is skipped via `fs.existsSync` below rather
+// than assumed present.
+const PROPOSE_WORKFLOW_FILES = [
+  ".claude/commands/opsx/propose.md",
+  ".claude/skills/openspec-propose/SKILL.md",
+  ".agents/skills/openspec-propose/SKILL.md",
+];
+
+// Matches the line that asks the engineer for a change description, in either of the two
+// wordings `openspec init` has generated it with ("no input" vs. "no clear input") — the
+// autoload line is inserted immediately before whichever one is present, at the same
+// indentation, so it reads as part of the same numbered step.
+const PROPOSE_ASK_USER_LINE_RE =
+  /^( *)If no .*input is provided, ask the user \(open-ended, no preset options\):/m;
+
+/**
+ * Idempotently patches the generated `/opsx:propose` workflow file(s) so they check
+ * `docs/changes/<change-id>/state.yaml` for the current branch before asking the engineer to
+ * describe the change. `openspec/config.yaml`'s `context:` pointer can't do this on its own —
+ * it's only surfaced once an artifact's `openspec instructions` is read, which happens after
+ * the workflow's own Step 1 (deciding the change name/description) has already run. Because
+ * `openspec update`/`openspec init --force` regenerates these files from scratch and wipes any
+ * hand edit, re-run `lv init` after either to re-apply this patch.
+ */
+function addProposeStateAutoload(repoRoot: string): void {
+  for (const relPath of PROPOSE_WORKFLOW_FILES) {
+    const filePath = path.join(repoRoot, relPath);
+    if (!fs.existsSync(filePath)) continue;
+
+    const raw = fs.readFileSync(filePath, "utf-8");
+    if (normalizeWhitespace(raw).includes(normalizeWhitespace(PROPOSE_STATE_AUTOLOAD_LINE))) {
+      continue; // already patched
+    }
+
+    const match = raw.match(PROPOSE_ASK_USER_LINE_RE);
+    if (!match || match.index === undefined) {
+      printError(
+        `Could not find the propose workflow's "ask the user" step in ${filePath} — skipping autoload patch. The file may have changed shape upstream.`,
+      );
+      continue;
+    }
+
+    const indent = match[1];
+    const insertion = `${indent}${PROPOSE_STATE_AUTOLOAD_LINE}\n\n`;
+    const patched = raw.slice(0, match.index) + insertion + raw.slice(match.index);
+    fs.writeFileSync(filePath, patched, "utf-8");
+  }
 }

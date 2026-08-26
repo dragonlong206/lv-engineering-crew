@@ -1,5 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
+import { printInfo, printWarn } from '../cli/helpers.js';
+import type { Config } from '../types.js';
 
 export interface LarkTicket {
   id: string;
@@ -87,15 +89,17 @@ export async function fetchTicket(
 }
 
 /**
- * Writes a newly allocated feature ID back onto a ticket's Feature ID field, preserving
- * whether the field holds a comma-joined string or an array (same shape `fetchTicket` reads)
- * and appending rather than overwriting any feature IDs already present.
+ * Writes one or more newly allocated feature IDs back onto a ticket's Feature ID field,
+ * preserving whether the field holds a comma-joined string or an array (same shape
+ * `fetchTicket` reads) and appending rather than overwriting any feature IDs already present.
+ * All new IDs are folded into a single write — the Lark PUT replaces the field's value
+ * wholesale, so appending them one call at a time would drop everything but the last.
  *
  * Throws on failure — callers that want this to be non-fatal (e.g. `lv start`) should catch it.
  */
 export async function updateTicketFeatureId(
   ticket: LarkTicket,
-  newFeatureId: string,
+  newFeatureIds: string[],
   baseId: string,
   tableId: string,
   featureIdField: string,
@@ -105,10 +109,10 @@ export async function updateTicketFeatureId(
   const fields: Record<string, unknown> = {};
 
   if (Array.isArray(existing)) {
-    fields[featureIdField] = [...existing, newFeatureId];
+    fields[featureIdField] = [...existing, ...newFeatureIds];
   } else {
     const existingStr = typeof existing === 'string' ? existing.trim() : '';
-    fields[featureIdField] = existingStr ? `${existingStr}, ${newFeatureId}` : newFeatureId;
+    fields[featureIdField] = [existingStr, ...newFeatureIds].filter(Boolean).join(', ');
   }
 
   const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records/${ticket.id}`;
@@ -126,6 +130,83 @@ export async function updateTicketFeatureId(
 
   if (!response.ok || data.code !== 0) {
     throw new Error(`Lark update error ${data.code ?? response.status}: ${data.msg ?? 'unknown error'}`);
+  }
+}
+
+/**
+ * Creates a record for a newly created feature in a dedicated Lark Base Features table.
+ * When `ticket` is given (a ticket-triggered creation), the record also references the
+ * originating ticket; otherwise the record carries only the feature ID and title.
+ *
+ * Throws on failure — `syncFeatureToLarkTable()` below is the non-fatal wrapper callers use.
+ */
+export async function createFeatureRecord(
+  featureId: string,
+  title: string,
+  baseId: string,
+  tableId: string,
+  token: string,
+  ticket?: Pick<LarkTicket, 'id' | 'title'>,
+): Promise<void> {
+  const fields: Record<string, unknown> = {
+    'Feature ID': featureId,
+    Title: title,
+  };
+  if (ticket) {
+    fields['Ticket ID'] = ticket.id;
+    fields['Ticket Title'] = ticket.title;
+  }
+
+  const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({ fields }),
+  });
+
+  const data = (await response.json()) as { code: number; msg?: string };
+
+  if (!response.ok || data.code !== 0) {
+    throw new Error(`Lark create error ${data.code ?? response.status}: ${data.msg ?? 'unknown error'}`);
+  }
+}
+
+/**
+ * Non-fatal wrapper around `createFeatureRecord()` for the three call sites that generate a
+ * brand-new feature's docs (`lv bootstrap` in both its modes, and `lv start`'s inline
+ * bootstrap). No-ops when `lark.features_table_id` is unset or `lark.sync_new_features` is
+ * disabled; a create failure is reported but never thrown, so it can't fail the invoking
+ * command — same non-fatal intent as the `sync_feature_id` write-back, just centralized here
+ * instead of repeated at each call site.
+ */
+export async function syncFeatureToLarkTable(
+  config: Config,
+  larkToken: string,
+  featureId: string,
+  title: string,
+  ticket?: Pick<LarkTicket, 'id' | 'title'>,
+): Promise<void> {
+  if (!config.lark.features_table_id) return;
+  if (!config.lark.sync_new_features) return;
+
+  try {
+    await createFeatureRecord(
+      featureId,
+      title,
+      config.lark.base_id,
+      config.lark.features_table_id,
+      larkToken,
+      ticket,
+    );
+    printInfo(`Synced feature ${featureId} to Lark Features table.`);
+  } catch (err) {
+    printWarn(
+      `Failed to sync feature ${featureId} to Lark Features table: ${(err as Error).message}. Continuing.`,
+    );
   }
 }
 

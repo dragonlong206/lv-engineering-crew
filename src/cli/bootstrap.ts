@@ -16,6 +16,7 @@ import {
 } from "../prompts.js";
 import { listCodeFiles } from "../tools/codebase.js";
 import { createBootstrapScanAgent } from "../agents/bootstrap-agent.js";
+import { getTenantAccessToken, syncFeatureToLarkTable } from "../tools/lark.js";
 import type { Config } from "../types.js";
 
 const bootstrapAgent = new Agent({
@@ -28,6 +29,38 @@ const bootstrapAgent = new Agent({
 export interface BootstrapScanHint {
   name?: string;
   description?: string;
+}
+
+/** First non-empty, non-comment line of generated overview.md, for a short human-readable title. */
+function deriveFeatureTitle(overviewMarkdown: string, featureId: string): string {
+  const line = overviewMarkdown
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0 && !l.startsWith("<!--"));
+  return line ? line.replace(/^#+\s*/, "") : featureId;
+}
+
+/**
+ * Fetches a Lark tenant token and syncs a brand-new feature to the configured Features table,
+ * when that sync is actually configured — skipping the token fetch entirely otherwise. Called
+ * directly by `lv bootstrap` (no ticket context); `lv start`'s inline bootstrap instead calls
+ * `syncFeatureToLarkTable()` itself, since it already holds a token and ticket from its own run.
+ */
+async function syncNewFeatureToLark(
+  config: Config,
+  featureId: string,
+  title: string,
+): Promise<void> {
+  if (!config.lark.features_table_id || !config.lark.sync_new_features) return;
+  if (!config.lark_app_id || !config.lark_app_secret) {
+    printWarn(
+      `Skipping Lark Features table sync for '${featureId}': missing lark_app_id/lark_app_secret.`,
+    );
+    return;
+  }
+
+  const larkToken = await getTenantAccessToken(config.lark_app_id, config.lark_app_secret);
+  await syncFeatureToLarkTable(config, larkToken, featureId, title);
 }
 
 export async function runBootstrap(
@@ -104,6 +137,7 @@ async function runBootstrapFromPaths(
   const designText = extractText(designResult);
 
   const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
+  const alreadyExists = fs.existsSync(path.join(featureDir, "overview.md"));
   fs.mkdirSync(featureDir, { recursive: true });
 
   writeFile(
@@ -113,6 +147,10 @@ async function runBootstrapFromPaths(
   writeFile(path.join(featureDir, "design.md"), AUTO_GENERATED_HEADER + designText);
 
   updateIndex(repoRoot, featureId);
+
+  if (!alreadyExists) {
+    await syncNewFeatureToLark(config, featureId, deriveFeatureTitle(overviewText, featureId));
+  }
 
   printSuccess(`Generated docs for '${featureId}'.`);
   console.log(`\nFiles written (not committed):`);
@@ -188,6 +226,15 @@ async function runBootstrapFromScan(
     featureId,
     hint,
   );
+
+  if (!alreadyExists) {
+    const overviewMarkdown = fs.readFileSync(overviewPath, "utf-8");
+    await syncNewFeatureToLark(
+      config,
+      featureId,
+      hint?.name ?? deriveFeatureTitle(overviewMarkdown, featureId),
+    );
+  }
 
   printSuccess(`Generated docs for '${featureId}' from codebase scan.`);
   console.log(`\nFiles written (not committed):`);

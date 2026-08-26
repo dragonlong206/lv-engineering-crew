@@ -1,9 +1,9 @@
-import fs from 'fs';
-import path from 'path';
-import { getFeaturesDir } from '../config.js';
+import fs from "fs";
+import path from "path";
+import { getFeaturesDir } from "../config.js";
 
 function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export interface ExistingFeature {
@@ -11,23 +11,18 @@ export interface ExistingFeature {
   overview: string;
 }
 
-/** Existing `Fxxxx` features with non-empty `overview.md` — match candidates for `lv start`. */
-export function listExistingFeatures(
-  repoRoot: string,
-  prefix: string,
-  digits: number,
-): ExistingFeature[] {
+/** Existing features with non-empty `overview.md` — match candidates for `lv start`. */
+export function listExistingFeatures(repoRoot: string): ExistingFeature[] {
   const featuresDir = getFeaturesDir(repoRoot);
-  const pattern = new RegExp(`^${escapeRegExp(prefix)}(\\d{${digits}})$`);
 
   const features: ExistingFeature[] = [];
   if (!fs.existsSync(featuresDir)) return features;
 
   for (const entry of fs.readdirSync(featuresDir, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !pattern.test(entry.name)) continue;
-    const overviewPath = path.join(featuresDir, entry.name, 'overview.md');
+    if (!entry.isDirectory()) continue;
+    const overviewPath = path.join(featuresDir, entry.name, "overview.md");
     if (!fs.existsSync(overviewPath)) continue;
-    const overview = fs.readFileSync(overviewPath, 'utf-8').trim();
+    const overview = fs.readFileSync(overviewPath, "utf-8").trim();
     if (!overview) continue;
     features.push({ id: entry.name, overview });
   }
@@ -58,7 +53,7 @@ export function allocateFeatureIds(
 
   const ids: string[] = [];
   for (let i = 1; i <= count; i++) {
-    ids.push(`${prefix}${String(max + i).padStart(digits, '0')}`);
+    ids.push(`${prefix}${String(max + i).padStart(digits, "0")}`);
   }
   return ids;
 }
