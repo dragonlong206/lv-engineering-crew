@@ -3,19 +3,52 @@ import path from "path";
 import yaml from "js-yaml";
 import { execa } from "execa";
 import { getRepoRoot } from "../config.js";
-import { printInfo, printSuccess, printError } from "./helpers.js";
+import { printInfo, printSuccess, printError, confirm } from "./helpers.js";
 import { CONTEXT_POINTER_LINES, ARCHIVE_GUIDANCE } from "../prompts.js";
 
 export interface InitOptions {
   tool?: string;
 }
 
+// The unscoped npm package `openspec` is an unrelated package — the actual CLI ships as
+// `@fission-ai/openspec` (bin name `openspec`).
+const OPENSPEC_PACKAGE = "@fission-ai/openspec";
+
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/** Resolves `false` only for "executable not found" (ENOENT); any other failure re-throws. */
+async function isOpenSpecInstalled(): Promise<boolean> {
+  try {
+    await execa("openspec", ["--version"]);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
+}
+
 export async function runInit(opts: InitOptions): Promise<void> {
   const repoRoot = getRepoRoot();
+
+  if (!(await isOpenSpecInstalled())) {
+    const proceed = await confirm(
+      `OpenSpec CLI not found. Install ${OPENSPEC_PACKAGE} globally now? (y/N) `,
+    );
+    if (!proceed) {
+      printInfo(`Skipping install. Run 'npm install -g ${OPENSPEC_PACKAGE}' manually, then re-run 'lv init'.`);
+      return;
+    }
+
+    printInfo(`Installing ${OPENSPEC_PACKAGE} globally...`);
+    try {
+      await execa("npm", ["install", "-g", OPENSPEC_PACKAGE], { stdio: "inherit" });
+    } catch (err) {
+      printError(`Failed to install ${OPENSPEC_PACKAGE}: ${(err as Error).message}`);
+      process.exit(1);
+    }
+  }
 
   printInfo(opts.tool ? `Installing OpenSpec for '${opts.tool}'...` : "Installing OpenSpec...");
 
