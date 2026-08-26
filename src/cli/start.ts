@@ -1,13 +1,54 @@
 import fs from 'fs';
-import { loadConfig, getRepoRoot, getFeatureDir } from '../config.js';
+import { Agent } from '@mastra/core/agent';
+import { loadConfig, getRepoRoot, getFeatureDir, getModelForStep } from '../config.js';
 import { fetchTicket, getTenantAccessToken, updateTicketFeatureId } from '../tools/lark.js';
 import { createBranch, commitAll, push } from '../integrations/git/client.js';
 import { writeState } from '../engine/state-io.js';
 import { renderBranchName, slugify } from '../engine/branch-naming.js';
-import { allocateFeatureIds } from '../engine/feature-id.js';
+import { allocateFeatureIds, listExistingFeatures, type ExistingFeature } from '../engine/feature-id.js';
 import { generateFeatureDocsFromScan } from './bootstrap.js';
-import { printInfo, printSuccess, printError, printWarn, confirm } from './helpers.js';
-import { LV_VERSION, type State } from '../types.js';
+import { printInfo, printSuccess, printError, printWarn, confirm, extractText, extractJson } from './helpers.js';
+import { buildFeatureMatchPrompt } from '../prompts.js';
+import { LV_VERSION, type Config, type State } from '../types.js';
+
+const featureMatchAgent = new Agent({
+  id: 'lv-feature-match-agent',
+  name: 'LV Feature Match Agent',
+  model: 'openai/gpt-4o-mini',
+  instructions:
+    'You are an assistant that matches project changes to existing features. Follow the user\'s prompt exactly and return only strict JSON — no surrounding text.',
+});
+
+/**
+ * Suggests an existing feature the given change might belong to, so `lv start` can offer it
+ * instead of defaulting straight to "this is new." Returns `undefined` when there are no
+ * existing features with docs to compare against (no LLM call is made in that case), when the
+ * model found no confident match, or when it returned an ID outside the candidate list.
+ */
+async function matchExistingFeature(
+  config: Config,
+  repoRoot: string,
+  title: string,
+  description: string,
+): Promise<ExistingFeature | undefined> {
+  const candidates = listExistingFeatures(repoRoot, config.feature_id_prefix, config.feature_id_digits);
+  if (candidates.length === 0) return undefined;
+
+  const model = getModelForStep(config, 'bootstrap');
+  const result = await featureMatchAgent.generate(buildFeatureMatchPrompt(title, description, candidates), {
+    model,
+  });
+  const { featureId } = extractJson<{ featureId: string | null }>(extractText(result));
+  if (!featureId) return undefined;
+
+  return candidates.find((c) => c.id === featureId);
+}
+
+/** First non-empty line of a feature's overview.md, for a short human-readable summary. */
+function summarize(feature: ExistingFeature): string {
+  const line = feature.overview.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
+  return line ?? feature.id;
+}
 
 export interface StartOptions {
   type?: string;
@@ -55,15 +96,28 @@ async function startFromTicket(ticketId: string, opts: StartOptions): Promise<vo
   const branchName = renderBranchName(config, ticketId, { type: opts.type, summary: ticket.title });
 
   // A ticket with no Feature ID yet is treated as introducing exactly one new feature —
-  // allocate an ID for it now rather than requiring it to be set in Lark first.
+  // allocate an ID for it now rather than requiring it to be set in Lark first. But first,
+  // check whether it's actually more work on a feature that already exists.
   let featureIds = ticket.featureIds;
   let newlyAllocatedFeatureId: string | undefined;
 
   if (featureIds.length === 0) {
-    const [allocated] = allocateFeatureIds(repoRoot, 1, config.feature_id_prefix, config.feature_id_digits);
-    printInfo(`Ticket has no '${config.lark.feature_id_field}' set — allocated new feature ${allocated}.`);
-    featureIds = [allocated];
-    newlyAllocatedFeatureId = allocated;
+    const match = await matchExistingFeature(config, repoRoot, ticket.title, ticket.description);
+    let matched: ExistingFeature | undefined;
+    if (match) {
+      const proceed = await confirm(`Looks like this matches ${match.id} (${summarize(match)}). Use it? [y/N] `);
+      if (proceed) matched = match;
+    }
+
+    if (matched) {
+      printInfo(`Using existing feature ${matched.id}.`);
+      featureIds = [matched.id];
+    } else {
+      const [allocated] = allocateFeatureIds(repoRoot, 1, config.feature_id_prefix, config.feature_id_digits);
+      printInfo(`Ticket has no '${config.lark.feature_id_field}' set — allocated new feature ${allocated}.`);
+      featureIds = [allocated];
+      newlyAllocatedFeatureId = allocated;
+    }
   }
 
   const featureDirs: { id: string; path: string }[] = featureIds.map((id) => ({
@@ -150,6 +204,16 @@ async function startFromDescription(description: string, opts: StartOptions): Pr
   const title = deriveTitle(description);
   const changeId = changeIdSlug(title) || `change_${Date.now()}`;
 
+  let featureIds: string[] = [];
+  const match = await matchExistingFeature(config, repoRoot, title, description);
+  if (match) {
+    const proceed = await confirm(`Looks like this matches ${match.id} (${summarize(match)}). Use it? [y/N] `);
+    if (proceed) {
+      printInfo(`Using existing feature ${match.id}.`);
+      featureIds = [match.id];
+    }
+  }
+
   // changeId is already a slug of the title, so it doubles as {summary} too — passing
   // `title` again as `summary` would duplicate it in the rendered branch name.
   const branchName = renderBranchName(config, changeId, { type: opts.type });
@@ -161,7 +225,7 @@ async function startFromDescription(description: string, opts: StartOptions): Pr
   const state: State = {
     title,
     description,
-    feature_ids: [],
+    feature_ids: featureIds,
     branch: branchName,
     created_at: now,
     lv_version: LV_VERSION,

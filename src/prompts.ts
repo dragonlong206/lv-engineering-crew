@@ -1,3 +1,5 @@
+import type { ExistingFeature } from "./engine/feature-id.js";
+
 // ---------------------------------------------------------------------------
 // Shared
 // ---------------------------------------------------------------------------
@@ -70,6 +72,36 @@ Return ONLY strict JSON matching this shape — no surrounding text, no code fen
 
 overviewMarkdown must cover: Purpose of the feature, Main components, High-level flow, Constraints and assumptions, Current state of the code.
 designMarkdown must cover: Architecture and layers, Data model / schema, APIs / interfaces, Key design decisions.`;
+
+// ---------------------------------------------------------------------------
+// Start — match an existing feature before allocating a new one
+// ---------------------------------------------------------------------------
+
+export function buildFeatureMatchPrompt(
+  title: string,
+  description: string,
+  candidates: ExistingFeature[],
+): string {
+  const candidateBlocks = candidates
+    .map((c) => `### ${c.id}\n${c.overview}`)
+    .join("\n\n");
+
+  return `You are matching a new change against a project's existing features, to see if the change is really more work on one of them rather than something new.
+
+## Change
+
+Title: ${title}
+Description: ${description || "(none)"}
+
+## Existing features
+
+${candidateBlocks}
+
+Decide whether the change above is clearly more work on exactly one of these existing features. Only pick one if you are confident it's the same feature, not just a related or similar one — when in doubt, answer null.
+
+Return ONLY strict JSON matching this shape — no surrounding text, no code fences:
+{"featureId": "<id-of-the-matching-feature-or-null>"}`;
+}
 
 // ---------------------------------------------------------------------------
 // OpenSpec init — instructional text written into openspec/config.yaml
