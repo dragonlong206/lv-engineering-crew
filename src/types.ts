@@ -28,6 +28,11 @@ export const LarkConfigSchema = z.object({
   // Whether `lv bootstrap`/`lv start` create a record in `features_table_id` for a brand-new
   // feature. Requires the app's tenant token to carry Bitable write scope.
   sync_new_features: z.boolean().default(true),
+  // Column names in `features_table_id`. Defaults match a freshly created Features table;
+  // override to match an existing table's actual column names. The Features table is
+  // separate from the ticket/task table and has no ticket-reference column.
+  features_table_feature_id_field: z.string().default("Feature ID"),
+  features_table_title_field: z.string().default("Title"),
 });
 
 export const ModelsConfigSchema = z.object({

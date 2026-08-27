@@ -1,16 +1,16 @@
 <!-- AUTO-GENERATED — not yet verified. Review and edit before committing. -->
 
-# Design Document for 'lv-bootstrap'
+# Design Document for `lv-bootstrap`
 
 ## Architecture and Layers
-`lv-bootstrap` is organized as a small CLI entrypoint, a bootstrap runner, an inline generation agent for path-based input, a tool-equipped scan agent for repo exploration, and an optional Lark sync step.
+`lv-bootstrap` is organized as a CLI entrypoint, a bootstrap runner, an inline generation agent for path-based input, a tool-equipped scan agent for repo exploration, and an optional Lark sync step.
 
 - **CLI layer**: `src/index.ts` registers `bootstrap <feature-id>` and forwards `--paths`, `--name`, and `--description` to `runBootstrap()`.
 - **Application layer**: `src/cli/bootstrap.ts` loads config, chooses the execution mode, constructs prompts, writes output files, updates the feature index, and can sync a new feature to Lark.
 - **Path-based generation layer**: an inline Mastra `Agent` named `lv-bootstrap-agent` generates the docs from a prebuilt code context string.
 - **Scan layer**: `createBootstrapScanAgent()` in `src/agents/bootstrap-agent.ts` creates a Mastra `Agent` named `lv-bootstrap-scan-agent` with repository tools attached.
 - **Tooling layer**: `src/tools/codebase.ts` exposes reusable file listing, file reading, and code search tools backed by filesystem traversal.
-- **Filesystem layer**: generated docs are written under `docs/features/<feature-id>/` and the feature index is maintained in `docs/features/INDEX.md`.
+- **Filesystem layer**: generated docs are written under `docs/features/<feature-id>/`, and the feature index is maintained in `docs/features/INDEX.md`.
 - **Integration layer**: `syncNewFeatureToLark()` uses the Lark client helpers in `src/tools/lark.ts` when feature-table sync is enabled.
 
 ## Data Model / Schema
@@ -45,7 +45,7 @@ The scan agent must return strict JSON with these keys:
 ```
 
 ### Lark sync condition
-A new feature is synced only when the configuration enables it and the required Lark credentials are present. The sync uses the generated overview text to derive a title when no explicit hint name is available.
+A feature is synced only when the configuration enables it and the required Lark credentials are present. The sync uses the generated overview text to derive a title when no explicit hint name is available.
 
 ## APIs / Interfaces
 ### Public command interface

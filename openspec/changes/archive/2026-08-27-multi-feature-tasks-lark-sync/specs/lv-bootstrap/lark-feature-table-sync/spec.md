@@ -4,23 +4,27 @@ Registers every newly created feature in a dedicated Lark Base Features table, s
 
 ## ADDED Requirements
 
-### Requirement: New feature docs generation creates a Lark Features table record
-The system SHALL create a record in the configured Lark Base Features table when a feature's docs directory (`docs/features/<feature-id>/`) does not exist prior to a docs-generation run, whether that run was triggered directly by `lv bootstrap <feature-id>` or by `lv start`'s inline bootstrap.
+### Requirement: Docs generation creates a Lark Features table record when one is missing
+The system SHALL create a record in the configured Lark Base Features table for a feature ID whenever docs generation runs for it — via `lv bootstrap <feature-id>` or `lv start`'s inline bootstrap — and that feature ID has no existing record in the table yet, regardless of whether its `docs/features/<feature-id>/` directory already existed locally. Existence is determined by checking the Features table itself, not by local docs-directory presence, so a feature whose docs were generated before the sync was configured (or whose prior sync attempt failed) is backfilled on a later run instead of being skipped forever.
 
 #### Scenario: lv bootstrap creates docs for a brand-new feature ID
-- **WHEN** `lv bootstrap <feature-id>` is run for a feature ID with no existing `docs/features/<feature-id>/` directory
+- **WHEN** `lv bootstrap <feature-id>` is run for a feature ID with no existing `docs/features/<feature-id>/` directory and no existing Features table record
 - **THEN** after docs are generated, the system creates a record for that feature ID in the configured Lark Base Features table
 
 #### Scenario: lv start's inline bootstrap creates docs for a brand-new feature ID
-- **WHEN** `lv start`'s inline feature bootstrap generates docs for a feature ID with no existing `docs/features/<feature-id>/` directory
+- **WHEN** `lv start`'s inline feature bootstrap generates docs for a feature ID with no existing `docs/features/<feature-id>/` directory and no existing Features table record
 - **THEN** after docs are generated, the system creates a record for that feature ID in the configured Lark Base Features table
 
-### Requirement: Existing feature docs are not re-synced
-The system SHALL NOT create or update a Features table record when a feature's docs directory already existed before the run, since that run is a refresh/refinement rather than the creation of a new feature.
+#### Scenario: Existing docs directory but a missing Features table record is backfilled
+- **WHEN** `lv bootstrap <feature-id>` or `lv start` runs for a feature ID whose `docs/features/<feature-id>/` directory already exists locally, but the configured Lark Features table has no record for that feature ID
+- **THEN** the system creates a record for that feature ID in the Features table
 
-#### Scenario: lv bootstrap refines an existing feature's docs
-- **WHEN** `lv bootstrap <feature-id>` is run for a feature ID whose `docs/features/<feature-id>/` directory already exists
-- **THEN** the system does not create or update any record in the Lark Features table
+### Requirement: A feature already recorded in the Features table is not duplicated
+The system SHALL NOT create a second Features table record for a feature ID that already has one there.
+
+#### Scenario: lv bootstrap refines an already-synced feature's docs
+- **WHEN** `lv bootstrap <feature-id>` is run for a feature ID that already has a record in the Lark Features table
+- **THEN** the system does not create a duplicate record in the Features table
 
 ### Requirement: Record includes feature ID, title, and originating ticket link
 The system SHALL populate the created Features table record with the feature ID, a title, and — when the docs were generated in the context of a ticket — a reference back to that ticket.

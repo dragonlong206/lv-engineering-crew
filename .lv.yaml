@@ -18,6 +18,12 @@ lark:
   # Default true; set false to keep new features local-only.
   # sync_new_features: true
 
+  # Column names in features_table_id. Defaults match a freshly created Features
+  # table; override to match an existing table's actual column names. The Features
+  # table is separate from the ticket/task table and carries no ticket reference.
+  # features_table_feature_id_field: "Feature ID"
+  # features_table_title_field: "Title"
+
 default_branch: main
 
 # Branch naming per type — {ticket_id} and {summary} are the only placeholders

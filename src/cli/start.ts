@@ -260,16 +260,20 @@ async function startFromTicket(
       );
       return;
     }
+  }
 
-    for (const featureId of missingFeatureIds) {
-      await syncFeatureToLarkTable(
-        config,
-        larkToken,
-        featureId,
-        newFeatureTitles.get(featureId) ?? ticket.title,
-        ticket,
-      );
-    }
+  // Sync every referenced feature, not just ones whose docs were just generated —
+  // `syncFeatureToLarkTable()` checks Lark itself for an existing record, so this also
+  // backfills a feature whose docs directory already existed locally but never got a Lark
+  // Features-table record (e.g. created before `features_table_id` was configured, or a prior
+  // sync attempt failed).
+  for (const featureId of featureIds) {
+    await syncFeatureToLarkTable(
+      config,
+      larkToken,
+      featureId,
+      newFeatureTitles.get(featureId) ?? ticket.title,
+    );
   }
 
   if (newlyAllocatedFeatureIds.length > 0) {
