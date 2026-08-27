@@ -179,7 +179,7 @@ async function startFromTicket(
   // allocate IDs for them now rather than requiring the ticket to be set in Lark first. But
   // first, check whether it's actually more work on a feature that already exists.
   let featureIds = ticket.featureIds;
-  let newlyAllocatedFeatureIds: string[] = [];
+  const ticketHadNoFeatureId = featureIds.length === 0;
   const newFeatureTitles = new Map<string, string>();
 
   if (featureIds.length === 0) {
@@ -220,7 +220,6 @@ async function startFromTicket(
         `No match, allocated new feature${allocated.length > 1 ? "s" : ""} ${allocated.join(", ")}.`,
       );
       featureIds = allocated;
-      newlyAllocatedFeatureIds = allocated;
       allocated.forEach((id, i) => newFeatureTitles.set(id, confirmedTitles[i]));
     }
   }
@@ -268,40 +267,44 @@ async function startFromTicket(
   // `syncFeatureToLarkTable()` checks Lark itself for an existing record, so this also
   // backfills a feature whose docs directory already existed locally but never got a Lark
   // Features-table record (e.g. created before `features_table_id` was configured, or a prior
-  // sync attempt failed).
+  // sync attempt failed). Its return value (the Features-table record_id) is captured here
+  // because a Link-typed `feature_id_field` needs it below to write the ticket back.
+  const featureRecordIds = new Map<string, string>();
   for (const featureId of featureIds) {
-    await syncFeatureToLarkTable(
+    const recordId = await syncFeatureToLarkTable(
       config,
       larkToken,
       featureId,
       newFeatureTitles.get(featureId) ?? ticket.title,
       ticket.projectRecordIds,
     );
+    if (recordId) featureRecordIds.set(featureId, recordId);
   }
 
-  if (newlyAllocatedFeatureIds.length > 0) {
+  if (ticketHadNoFeatureId && featureIds.length > 0) {
     if (config.lark.sync_feature_id) {
       try {
         await updateTicketFeatureId(
           ticket,
-          newlyAllocatedFeatureIds,
+          featureIds,
           config.lark.base_id,
           config.lark.table_id,
           config.lark.feature_id_field,
           larkToken,
+          featureRecordIds,
         );
         printSuccess(
-          `Synced feature${newlyAllocatedFeatureIds.length > 1 ? "s" : ""} ${newlyAllocatedFeatureIds.join(", ")} back to Lark ticket ${ticketId}.`,
+          `Synced feature${featureIds.length > 1 ? "s" : ""} ${featureIds.join(", ")} back to Lark ticket ${ticketId}.`,
         );
       } catch (err) {
         printWarn(
-          `Failed to sync feature${newlyAllocatedFeatureIds.length > 1 ? "s" : ""} ${newlyAllocatedFeatureIds.join(", ")} back to Lark: ${(err as Error).message}. ` +
-            `Continuing — the allocation${newlyAllocatedFeatureIds.length > 1 ? "s are" : " is"} local-only.`,
+          `Failed to sync feature${featureIds.length > 1 ? "s" : ""} ${featureIds.join(", ")} back to Lark: ${(err as Error).message}. ` +
+            `Continuing — the feature${featureIds.length > 1 ? "s remain" : " remains"} local-only.`,
         );
       }
     } else {
       printInfo(
-        `Lark sync disabled (lark.sync_feature_id: false) — ${newlyAllocatedFeatureIds.join(", ")} ${newlyAllocatedFeatureIds.length > 1 ? "are" : "is"} local-only.`,
+        `Lark sync disabled (lark.sync_feature_id: false) — ${featureIds.join(", ")} ${featureIds.length > 1 ? "are" : "is"} local-only.`,
       );
     }
   }

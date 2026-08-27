@@ -32,8 +32,9 @@ The ticket-based path is linear but has a decision point when no Feature ID is p
 - `featureIds: string[]`
 - `projectRecordIds: string[]`
 - `rawFields: Record<string, unknown>`
+- `featureIdFieldIsLink: boolean`
 
-Feature IDs are read from the configured Lark feature field as either a comma-separated string or an array of strings, with empty values filtered out. The title is read from the configured title field and falls back to the ticket ID if empty. The description is read from `Description` or `description` when present. Linked project record IDs are extracted from the configured project link field.
+`fetchTicket()` auto-detects whether the configured Lark feature field is a Bitable Link field by calling `isLinkField()`, which pages through the ticket table's field metadata (`GET .../fields`) and checks the matching field's numeric `type` against Lark's single-link/duplex-link type codes (18, 21) — rather than trusting a config flag or sniffing the shape of the field's current value, since an empty Link field and an empty text field read back identically and can't be told apart that way. When the field is a Link field, feature IDs are read from each linked record's `text_arr` (its primary-field text) instead of a comma-separated string/array. `featureIdFieldIsLink` is carried on the returned `LarkTicket` so `updateTicketFeatureId()` doesn't need to re-look it up. Writing back mirrors this: for a non-link field the write is a comma-joined string / string array; for a Link field, `updateTicketFeatureId()` writes an array of the linked Features-table rows' `record_id`s (resolved via `syncFeatureToLarkTable()`, which must run first for each feature ID being written) — writing plain text to a Link field fails with Lark error 1254067 `LinkFieldConvFail`. The title is read from the configured title field and falls back to the ticket ID if empty. The description is read from `Description` or `description` when present. Linked project record IDs are extracted from the configured project link field.
 
 ### Persisted state
 
@@ -103,6 +104,7 @@ Key supporting functions and interfaces are:
 - Allow inline feature doc generation for missing feature directories so ticket-driven starts can bootstrap feature documentation in the same run.
 - Pause for confirmation after generating docs, because those files are meant to be reviewed before they are committed.
 - Use best-effort write-back to Lark for allocated Feature IDs and feature-table records, since write permissions may not always be available.
+- Auto-detect (via the field's own Bitable metadata, not a config flag) whether the ticket's Feature ID field is plain text/multi-select or a Link field, since a Link field write requires resolved `record_id`s rather than text and would otherwise fail with Lark error 1254067 `LinkFieldConvFail` — and a config flag would need to be kept in sync with the base by hand, which is easy to forget.
 - Update ticket status as a separate best-effort Lark write, and only when status syncing is enabled.
 - Create the branch before writing state and committing so the resulting state and commit are anchored to the intended branch.
 - Use a single YAML state file as the change-context source of truth.

@@ -10,6 +10,10 @@ export interface LarkTicket {
   featureIds: string[];
   projectRecordIds: string[];
   rawFields: Record<string, unknown>;
+  // Whether `featureIdField` (the field named by `lark.feature_id_field`) is a Bitable Link
+  // field, per `isLinkField()`. Determined once in `fetchTicket()` and carried on the ticket
+  // so `updateTicketFeatureId()` doesn't need to re-look it up.
+  featureIdFieldIsLink: boolean;
 }
 
 /**
@@ -27,6 +31,70 @@ function extractLinkRecordIds(value: unknown): string[] {
     }
   }
   return ids;
+}
+
+/**
+ * Extracts the human-readable labels (the linked record's primary field text) from a Bitable
+ * link-field's read value, via each entry's `text_arr`. Used for `feature_id_field` when
+ * `isLinkField()` detects it as a Link field, since the Features table's primary field is
+ * expected to hold the feature ID itself (e.g. "F0001") — same read shape `extractLinkRecordIds`
+ * handles, different property.
+ */
+function extractLinkTexts(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const texts: string[] = [];
+  for (const entry of value) {
+    if (entry && typeof entry === 'object' && Array.isArray((entry as { text_arr?: unknown }).text_arr)) {
+      texts.push(...(entry as { text_arr: string[] }).text_arr);
+    }
+  }
+  return texts;
+}
+
+// Lark Bitable numeric field `type`s for a single-link and a duplex-link field, per
+// https://open.larksuite.com/document/server-docs/docs/bitable-v1/app-table-field/field-list
+const LINK_FIELD_TYPES = new Set([18, 21]);
+
+/**
+ * Looks up whether `fieldName` in the given table is a Bitable Link field (single-link or
+ * duplex-link), by paging through the table's field metadata until a name match is found.
+ * Determining this from the field's own definition — rather than a config flag, or sniffing the
+ * shape of a record's value for that field — is what lets `fetchTicket`/`updateTicketFeatureId`
+ * handle a ticket whose `feature_id_field` currently has no value at all: an empty Link field's
+ * read value is indistinguishable from an empty text field's, so shape alone can't tell them
+ * apart, but the field's declared type always can. Returns `false` (not `undefined`) when the
+ * field name isn't found, so callers can treat "field missing" the same as "not a link" rather
+ * than special-casing it.
+ */
+async function isLinkField(baseId: string, tableId: string, fieldName: string, token: string): Promise<boolean> {
+  let pageToken: string | undefined;
+
+  do {
+    const url = new URL(`https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/fields`);
+    url.searchParams.set('page_size', '100');
+    if (pageToken) url.searchParams.set('page_token', pageToken);
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = (await response.json()) as {
+      code: number;
+      msg?: string;
+      data?: { items?: { field_name: string; type: number }[]; has_more?: boolean; page_token?: string };
+    };
+
+    if (!response.ok || data.code !== 0) {
+      throw new Error(`Lark field-list error ${data.code ?? response.status}: ${data.msg ?? 'unknown error'}`);
+    }
+
+    const match = data.data?.items?.find((f) => f.field_name === fieldName);
+    if (match) return LINK_FIELD_TYPES.has(match.type);
+
+    pageToken = data.data?.has_more ? data.data.page_token : undefined;
+  } while (pageToken);
+
+  return false;
 }
 
 /**
@@ -87,10 +155,14 @@ export async function fetchTicket(
 
   const fields = data.data.record.fields;
 
+  const featureIdFieldIsLink = await isLinkField(baseId, tableId, featureIdField, token);
+
   const rawFeatureId = fields[featureIdField];
   let featureIds: string[] = [];
 
-  if (typeof rawFeatureId === 'string' && rawFeatureId.trim()) {
+  if (featureIdFieldIsLink) {
+    featureIds = extractLinkTexts(rawFeatureId).map((s) => s.trim()).filter(Boolean);
+  } else if (typeof rawFeatureId === 'string' && rawFeatureId.trim()) {
     featureIds = rawFeatureId.split(',').map((s) => s.trim()).filter(Boolean);
   } else if (Array.isArray(rawFeatureId)) {
     featureIds = rawFeatureId.flatMap((v) =>
@@ -106,15 +178,23 @@ export async function fetchTicket(
 
   const projectRecordIds = extractLinkRecordIds(fields[projectField]);
 
-  return { id: ticketId, title, description, featureIds, projectRecordIds, rawFields: fields };
+  return { id: ticketId, title, description, featureIds, projectRecordIds, rawFields: fields, featureIdFieldIsLink };
 }
 
 /**
  * Writes one or more newly allocated feature IDs back onto a ticket's Feature ID field,
- * preserving whether the field holds a comma-joined string or an array (same shape
- * `fetchTicket` reads) and appending rather than overwriting any feature IDs already present.
- * All new IDs are folded into a single write — the Lark PUT replaces the field's value
- * wholesale, so appending them one call at a time would drop everything but the last.
+ * appending rather than overwriting any feature IDs already present. All new IDs are folded
+ * into a single write — the Lark PUT replaces the field's value wholesale, so appending them
+ * one call at a time would drop everything but the last.
+ *
+ * When `ticket.featureIdFieldIsLink` is set (detected by `fetchTicket()` via `isLinkField()`),
+ * the field is a Bitable Link field pointing at the Features table — writing plain text to it
+ * fails with Lark error 1254067 `LinkFieldConvFail`, so the write uses `record_id`s instead.
+ * Each new feature ID must have a corresponding Features-table `record_id` in
+ * `newFeatureRecordIds` (populated by `syncFeatureToLarkTable()`, which callers are expected to
+ * run first for every ID being written) — this throws if one is missing rather than silently
+ * dropping it. Otherwise the field holds a comma-joined string or an array of plain strings,
+ * matching what `fetchTicket` reads for a non-link field.
  *
  * Throws on failure — callers that want this to be non-fatal (e.g. `lv start`) should catch it.
  */
@@ -125,11 +205,25 @@ export async function updateTicketFeatureId(
   tableId: string,
   featureIdField: string,
   token: string,
+  newFeatureRecordIds?: Map<string, string>,
 ): Promise<void> {
   const existing = ticket.rawFields[featureIdField];
   const fields: Record<string, unknown> = {};
 
-  if (Array.isArray(existing)) {
+  if (ticket.featureIdFieldIsLink) {
+    const existingRecordIds = extractLinkRecordIds(existing);
+    const newRecordIds = newFeatureIds.map((id) => {
+      const recordId = newFeatureRecordIds?.get(id);
+      if (!recordId) {
+        throw new Error(
+          `'${featureIdField}' is a Link field, but no Lark Features-table record_id was resolved for '${id}' ` +
+            `(requires lark.features_table_id and lark.sync_new_features to be configured/enabled).`,
+        );
+      }
+      return recordId;
+    });
+    fields[featureIdField] = [...existingRecordIds, ...newRecordIds];
+  } else if (Array.isArray(existing)) {
     fields[featureIdField] = [...existing, ...newFeatureIds];
   } else {
     const existingStr = typeof existing === 'string' ? existing.trim() : '';
@@ -196,6 +290,9 @@ export async function updateTicketStatus(
  * from `LarkConfigSchema`'s `features_table_*_field` settings, so they can be pointed at
  * whatever an existing Features table actually calls those columns.
  *
+ * Returns the created record's `record_id` — needed to write `feature_id_field` back onto a
+ * ticket when it's a Link field (see `updateTicketFeatureId()`'s `options.isLinkField`).
+ *
  * Throws on failure — `syncFeatureToLarkTable()` below is the non-fatal wrapper callers use.
  */
 export async function createFeatureRecord(
@@ -209,7 +306,7 @@ export async function createFeatureRecord(
     'features_table_feature_id_field' | 'features_table_title_field' | 'features_table_project_field'
   >,
   projectRecordIds?: string[],
-): Promise<void> {
+): Promise<string> {
   const fields: Record<string, unknown> = {
     [fieldNames.features_table_feature_id_field]: featureId,
     [fieldNames.features_table_title_field]: title,
@@ -229,28 +326,39 @@ export async function createFeatureRecord(
     body: JSON.stringify({ fields }),
   });
 
-  const data = (await response.json()) as { code: number; msg?: string };
+  const data = (await response.json()) as {
+    code: number;
+    msg?: string;
+    data?: { record?: { record_id?: string } };
+  };
 
   if (!response.ok || data.code !== 0) {
     throw new Error(`Lark create error ${data.code ?? response.status}: ${data.msg ?? 'unknown error'}`);
   }
+
+  const recordId = data.data?.record?.record_id;
+  if (!recordId) {
+    throw new Error('Lark create error: response was missing the created record_id');
+  }
+  return recordId;
 }
 
 /**
- * Looks up whether `featureId` already has a record in the Lark Features table. Used by
- * `syncFeatureToLarkTable()` to decide whether to create one — checking Lark directly, rather
- * than trusting local `docs/features/<id>/` presence as a proxy, is what lets that function
- * backfill a record for a feature whose docs already existed locally but whose Lark write
- * never happened (e.g. generated before `features_table_id` was configured, or a prior sync
- * attempt failed).
+ * Looks up whether `featureId` already has a record in the Lark Features table, returning its
+ * `record_id` if so. Used by `syncFeatureToLarkTable()` to decide whether to create one —
+ * checking Lark directly, rather than trusting local `docs/features/<id>/` presence as a proxy,
+ * is what lets that function backfill a record for a feature whose docs already existed locally
+ * but whose Lark write never happened (e.g. generated before `features_table_id` was
+ * configured, or a prior sync attempt failed). The `record_id` (rather than a plain boolean) is
+ * also what `updateTicketFeatureId()` needs to write a Link-typed `feature_id_field`.
  */
-async function featureRecordExists(
+async function findFeatureRecordId(
   featureId: string,
   baseId: string,
   tableId: string,
   featureIdField: string,
   token: string,
-): Promise<boolean> {
+): Promise<string | undefined> {
   const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records/search`;
 
   const response = await fetch(url, {
@@ -268,24 +376,32 @@ async function featureRecordExists(
     }),
   });
 
-  const data = (await response.json()) as { code: number; msg?: string; data?: { total?: number } };
+  const data = (await response.json()) as {
+    code: number;
+    msg?: string;
+    data?: { total?: number; items?: { record_id: string }[] };
+  };
 
   if (!response.ok || data.code !== 0) {
     throw new Error(`Lark search error ${data.code ?? response.status}: ${data.msg ?? 'unknown error'}`);
   }
 
-  return (data.data?.total ?? 0) > 0;
+  return data.data?.items?.[0]?.record_id;
 }
 
 /**
- * Non-fatal, idempotent sync of one feature into the Lark Features table. No-ops when
- * `lark.features_table_id` is unset or `lark.sync_new_features` is disabled. Otherwise checks
- * Lark first via `featureRecordExists()` and only creates a record when one isn't already
- * there — so callers can call this for every feature a command touches, not just ones whose
- * local docs directory was just created, and a feature with existing docs but a missing Lark
- * record still gets backfilled. A create (or lookup) failure is reported but never thrown, so
- * it can't fail the invoking command — same non-fatal intent as the `sync_feature_id`
- * write-back.
+ * Non-fatal, idempotent sync of one feature into the Lark Features table. No-ops (returning
+ * `undefined`) when `lark.features_table_id` is unset or `lark.sync_new_features` is disabled.
+ * Otherwise checks Lark first via `findFeatureRecordId()` and only creates a record when one
+ * isn't already there — so callers can call this for every feature a command touches, not just
+ * ones whose local docs directory was just created, and a feature with existing docs but a
+ * missing Lark record still gets backfilled. A create (or lookup) failure is reported but never
+ * thrown, so it can't fail the invoking command — same non-fatal intent as the
+ * `sync_feature_id` write-back.
+ *
+ * Returns the Features-table `record_id` (pre-existing or newly created), or `undefined` if
+ * sync was skipped or failed. Callers writing a Link-typed `feature_id_field` back onto a
+ * ticket (`updateTicketFeatureId()`'s `options.isLinkField`) need this record_id to do so.
  */
 export async function syncFeatureToLarkTable(
   config: Config,
@@ -293,21 +409,21 @@ export async function syncFeatureToLarkTable(
   featureId: string,
   title: string,
   projectRecordIds?: string[],
-): Promise<void> {
-  if (!config.lark.features_table_id) return;
-  if (!config.lark.sync_new_features) return;
+): Promise<string | undefined> {
+  if (!config.lark.features_table_id) return undefined;
+  if (!config.lark.sync_new_features) return undefined;
 
   try {
-    const alreadySynced = await featureRecordExists(
+    const existingRecordId = await findFeatureRecordId(
       featureId,
       config.lark.base_id,
       config.lark.features_table_id,
       config.lark.features_table_feature_id_field,
       larkToken,
     );
-    if (alreadySynced) return;
+    if (existingRecordId) return existingRecordId;
 
-    await createFeatureRecord(
+    const recordId = await createFeatureRecord(
       featureId,
       title,
       config.lark.base_id,
@@ -317,10 +433,12 @@ export async function syncFeatureToLarkTable(
       projectRecordIds,
     );
     printInfo(`Synced feature ${featureId} to Lark Features table.`);
+    return recordId;
   } catch (err) {
     printWarn(
       `Failed to sync feature ${featureId} to Lark Features table: ${(err as Error).message}. Continuing.`,
     );
+    return undefined;
   }
 }
 
