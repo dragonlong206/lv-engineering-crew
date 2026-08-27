@@ -41,10 +41,14 @@ function deriveFeatureTitle(overviewMarkdown: string, featureId: string): string
 }
 
 /**
- * Fetches a Lark tenant token and syncs a brand-new feature to the configured Features table,
- * when that sync is actually configured — skipping the token fetch entirely otherwise. Called
- * directly by `lv bootstrap` (no ticket context); `lv start`'s inline bootstrap instead calls
- * `syncFeatureToLarkTable()` itself, since it already holds a token and ticket from its own run.
+ * Fetches a Lark tenant token and syncs a feature to the configured Features table, when that
+ * sync is actually configured — skipping the token fetch entirely otherwise. Called
+ * unconditionally after (re)generating a feature's docs, regardless of whether its docs
+ * directory already existed: `syncFeatureToLarkTable()` checks Lark itself for an existing
+ * record, so this also backfills a feature whose docs predate `features_table_id` being
+ * configured or whose Lark write previously failed. Called directly by `lv bootstrap`;
+ * `lv start`'s inline bootstrap instead calls `syncFeatureToLarkTable()` itself, since it
+ * already holds a token from its own run.
  */
 async function syncNewFeatureToLark(
   config: Config,
@@ -137,7 +141,6 @@ async function runBootstrapFromPaths(
   const designText = extractText(designResult);
 
   const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
-  const alreadyExists = fs.existsSync(path.join(featureDir, "overview.md"));
   fs.mkdirSync(featureDir, { recursive: true });
 
   writeFile(
@@ -148,9 +151,7 @@ async function runBootstrapFromPaths(
 
   updateIndex(repoRoot, featureId);
 
-  if (!alreadyExists) {
-    await syncNewFeatureToLark(config, featureId, deriveFeatureTitle(overviewText, featureId));
-  }
+  await syncNewFeatureToLark(config, featureId, deriveFeatureTitle(overviewText, featureId));
 
   printSuccess(`Generated docs for '${featureId}'.`);
   console.log(`\nFiles written (not committed):`);
@@ -227,14 +228,12 @@ async function runBootstrapFromScan(
     hint,
   );
 
-  if (!alreadyExists) {
-    const overviewMarkdown = fs.readFileSync(overviewPath, "utf-8");
-    await syncNewFeatureToLark(
-      config,
-      featureId,
-      hint?.name ?? deriveFeatureTitle(overviewMarkdown, featureId),
-    );
-  }
+  const overviewMarkdown = fs.readFileSync(overviewPath, "utf-8");
+  await syncNewFeatureToLark(
+    config,
+    featureId,
+    hint?.name ?? deriveFeatureTitle(overviewMarkdown, featureId),
+  );
 
   printSuccess(`Generated docs for '${featureId}' from codebase scan.`);
   console.log(`\nFiles written (not committed):`);

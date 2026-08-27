@@ -19,6 +19,8 @@ export const LarkConfigSchema = z.object({
   table_id: z.string(),
   feature_id_field: z.string().default("Feature ID"),
   title_field: z.string().default("Title"),
+  // Column holding the ticket's one-way/duplex link to the Projects table.
+  project_field: z.string().default("Project"),
   // Whether `lv start` writes a newly allocated feature ID back to the ticket's
   // Feature ID field. Requires the app's tenant token to carry Bitable write scope.
   sync_feature_id: z.boolean().default(true),
@@ -28,6 +30,15 @@ export const LarkConfigSchema = z.object({
   // Whether `lv bootstrap`/`lv start` create a record in `features_table_id` for a brand-new
   // feature. Requires the app's tenant token to carry Bitable write scope.
   sync_new_features: z.boolean().default(true),
+  // Column names in `features_table_id`. Defaults match a freshly created Features table;
+  // override to match an existing table's actual column names. The Features table is
+  // separate from the ticket/task table and has no ticket-reference column.
+  features_table_feature_id_field: z.string().default("Feature ID"),
+  features_table_title_field: z.string().default("Title"),
+  // Column on the Features table holding its own link to the Projects table — populated
+  // from the originating ticket's `project_field` link when a feature is created via
+  // `lv start` for a ticket.
+  features_table_project_field: z.string().default("Project"),
 });
 
 export const ModelsConfigSchema = z.object({

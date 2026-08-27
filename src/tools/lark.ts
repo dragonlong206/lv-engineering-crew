@@ -8,7 +8,25 @@ export interface LarkTicket {
   title: string;
   description: string;
   featureIds: string[];
+  projectRecordIds: string[];
   rawFields: Record<string, unknown>;
+}
+
+/**
+ * Extracts linked record IDs from a Bitable link-field's read value (single-link or
+ * duplex-link), which comes back as an array of `{ record_ids, table_id, text, text_arr }`
+ * objects — `record_ids` is omitted entirely when the link is empty. Returns `[]` for any
+ * other shape (unset field, or a field that isn't a link type).
+ */
+function extractLinkRecordIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids: string[] = [];
+  for (const entry of value) {
+    if (entry && typeof entry === 'object' && Array.isArray((entry as { record_ids?: unknown }).record_ids)) {
+      ids.push(...(entry as { record_ids: string[] }).record_ids);
+    }
+  }
+  return ids;
 }
 
 /**
@@ -42,6 +60,7 @@ export async function fetchTicket(
   tableId: string,
   featureIdField: string,
   titleField: string,
+  projectField: string,
   token: string,
 ): Promise<LarkTicket> {
   const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records/${ticketId}`;
@@ -85,7 +104,9 @@ export async function fetchTicket(
   const description = typeof fields['Description'] === 'string' ? fields['Description'] :
     typeof fields['description'] === 'string' ? fields['description'] : '';
 
-  return { id: ticketId, title, description, featureIds, rawFields: fields };
+  const projectRecordIds = extractLinkRecordIds(fields[projectField]);
+
+  return { id: ticketId, title, description, featureIds, projectRecordIds, rawFields: fields };
 }
 
 /**
@@ -134,9 +155,13 @@ export async function updateTicketFeatureId(
 }
 
 /**
- * Creates a record for a newly created feature in a dedicated Lark Base Features table.
- * When `ticket` is given (a ticket-triggered creation), the record also references the
- * originating ticket; otherwise the record carries only the feature ID and title.
+ * Creates a record for a newly created feature in a dedicated Lark Base Features table. The
+ * Features table is separate from the ticket/task table and carries no reference back to a
+ * ticket — the record holds the feature ID, title, and (when `projectRecordIds` is given and
+ * non-empty) the same Projects-table link the originating ticket carries, since the Features
+ * table has its own independent link field to that same Projects table. Column names come
+ * from `LarkConfigSchema`'s `features_table_*_field` settings, so they can be pointed at
+ * whatever an existing Features table actually calls those columns.
  *
  * Throws on failure — `syncFeatureToLarkTable()` below is the non-fatal wrapper callers use.
  */
@@ -146,15 +171,18 @@ export async function createFeatureRecord(
   baseId: string,
   tableId: string,
   token: string,
-  ticket?: Pick<LarkTicket, 'id' | 'title'>,
+  fieldNames: Pick<
+    Config['lark'],
+    'features_table_feature_id_field' | 'features_table_title_field' | 'features_table_project_field'
+  >,
+  projectRecordIds?: string[],
 ): Promise<void> {
   const fields: Record<string, unknown> = {
-    'Feature ID': featureId,
-    Title: title,
+    [fieldNames.features_table_feature_id_field]: featureId,
+    [fieldNames.features_table_title_field]: title,
   };
-  if (ticket) {
-    fields['Ticket ID'] = ticket.id;
-    fields['Ticket Title'] = ticket.title;
+  if (projectRecordIds && projectRecordIds.length > 0) {
+    fields[fieldNames.features_table_project_field] = projectRecordIds;
   }
 
   const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records`;
@@ -176,31 +204,84 @@ export async function createFeatureRecord(
 }
 
 /**
- * Non-fatal wrapper around `createFeatureRecord()` for the three call sites that generate a
- * brand-new feature's docs (`lv bootstrap` in both its modes, and `lv start`'s inline
- * bootstrap). No-ops when `lark.features_table_id` is unset or `lark.sync_new_features` is
- * disabled; a create failure is reported but never thrown, so it can't fail the invoking
- * command — same non-fatal intent as the `sync_feature_id` write-back, just centralized here
- * instead of repeated at each call site.
+ * Looks up whether `featureId` already has a record in the Lark Features table. Used by
+ * `syncFeatureToLarkTable()` to decide whether to create one — checking Lark directly, rather
+ * than trusting local `docs/features/<id>/` presence as a proxy, is what lets that function
+ * backfill a record for a feature whose docs already existed locally but whose Lark write
+ * never happened (e.g. generated before `features_table_id` was configured, or a prior sync
+ * attempt failed).
+ */
+async function featureRecordExists(
+  featureId: string,
+  baseId: string,
+  tableId: string,
+  featureIdField: string,
+  token: string,
+): Promise<boolean> {
+  const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records/search`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({
+      filter: {
+        conjunction: 'and',
+        conditions: [{ field_name: featureIdField, operator: 'is', value: [featureId] }],
+      },
+      page_size: 1,
+    }),
+  });
+
+  const data = (await response.json()) as { code: number; msg?: string; data?: { total?: number } };
+
+  if (!response.ok || data.code !== 0) {
+    throw new Error(`Lark search error ${data.code ?? response.status}: ${data.msg ?? 'unknown error'}`);
+  }
+
+  return (data.data?.total ?? 0) > 0;
+}
+
+/**
+ * Non-fatal, idempotent sync of one feature into the Lark Features table. No-ops when
+ * `lark.features_table_id` is unset or `lark.sync_new_features` is disabled. Otherwise checks
+ * Lark first via `featureRecordExists()` and only creates a record when one isn't already
+ * there — so callers can call this for every feature a command touches, not just ones whose
+ * local docs directory was just created, and a feature with existing docs but a missing Lark
+ * record still gets backfilled. A create (or lookup) failure is reported but never thrown, so
+ * it can't fail the invoking command — same non-fatal intent as the `sync_feature_id`
+ * write-back.
  */
 export async function syncFeatureToLarkTable(
   config: Config,
   larkToken: string,
   featureId: string,
   title: string,
-  ticket?: Pick<LarkTicket, 'id' | 'title'>,
+  projectRecordIds?: string[],
 ): Promise<void> {
   if (!config.lark.features_table_id) return;
   if (!config.lark.sync_new_features) return;
 
   try {
+    const alreadySynced = await featureRecordExists(
+      featureId,
+      config.lark.base_id,
+      config.lark.features_table_id,
+      config.lark.features_table_feature_id_field,
+      larkToken,
+    );
+    if (alreadySynced) return;
+
     await createFeatureRecord(
       featureId,
       title,
       config.lark.base_id,
       config.lark.features_table_id,
       larkToken,
-      ticket,
+      config.lark,
+      projectRecordIds,
     );
     printInfo(`Synced feature ${featureId} to Lark Features table.`);
   } catch (err) {
@@ -219,10 +300,11 @@ export const larkTicketTool = createTool({
     tableId: z.string(),
     featureIdField: z.string(),
     titleField: z.string(),
+    projectField: z.string(),
     token: z.string(),
   }),
-  execute: async ({ ticketId, baseId, tableId, featureIdField, titleField, token }) => {
-    const ticket = await fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, token);
+  execute: async ({ ticketId, baseId, tableId, featureIdField, titleField, projectField, token }) => {
+    const ticket = await fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, projectField, token);
     return ticket;
   },
 });

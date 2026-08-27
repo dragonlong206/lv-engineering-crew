@@ -11,12 +11,20 @@ The system SHALL, for each feature ID referenced by a ticket, generate that feat
 - **WHEN** `lv start` is run for a ticket whose Feature ID field lists an ID with no `docs/features/<id>/` directory on disk
 - **THEN** the system generates that feature's docs using the ticket's title and description as context, without exiting with an error
 
-### Requirement: Empty Feature ID allocates a new feature
-The system SHALL allocate a new feature ID when a ticket's Feature ID field is empty and no existing feature was confirmed as a match, rather than exiting with an error.
+### Requirement: Empty Feature ID allocates one or more new features
+The system SHALL, when a ticket's Feature ID field is empty and no existing feature was confirmed as a match, infer from the ticket's title and description how many distinct new features are implied (with a suggested title for each), present that inferred set to the engineer for confirmation or adjustment, and then allocate a new feature ID for each confirmed feature — rather than always allocating exactly one.
 
-#### Scenario: Ticket has no Feature ID set
-- **WHEN** `lv start` is run for a ticket whose Feature ID field is empty, and either no existing feature was suggested or the engineer declined the suggested match
-- **THEN** the system allocates a new feature ID and proceeds to generate that feature's docs
+#### Scenario: Ticket implies a single feature
+- **WHEN** `lv start` is run for a ticket whose Feature ID field is empty, either no existing feature was suggested or the engineer declined the suggested match, and the inferred set contains exactly one feature
+- **THEN** the system allocates one new feature ID after the engineer confirms, and proceeds to generate that feature's docs — matching prior single-feature behavior
+
+#### Scenario: Ticket implies multiple distinct features
+- **WHEN** `lv start` is run for a ticket whose Feature ID field is empty, either no existing feature was suggested or the engineer declined the suggested match, and the inferred set contains more than one feature
+- **THEN** the system presents the inferred features to the engineer, and upon confirmation allocates a new feature ID for each one and generates docs for each
+
+#### Scenario: Engineer adjusts the inferred set
+- **WHEN** the engineer is presented with the inferred set of new features and changes it — adding, removing, or editing an entry — before confirming
+- **THEN** the system allocates new feature IDs only for the engineer-confirmed set, not the originally inferred one
 
 ### Requirement: Empty or missing feature reference is matched against existing features first
 The system SHALL, before treating an empty Feature ID (ticket mode) or an unset feature reference (description mode) as a brand-new feature, compare the change's title/description against every existing feature that has non-empty docs and offer the best match, if any, for the engineer to confirm.

@@ -1,0 +1,10 @@
+ticket_id: recvtvTob1szuw
+title: >-
+  `lv start` should create feature on Lark Base and update feature IDs to the
+  ticket
+description: ''
+feature_ids:
+  - lv-start
+branch: feature/recvtvTob1szuw-lv-start-should-create-feature-on-lark-base-and-up
+created_at: '2026-08-27T16:02:24.405Z'
+lv_version: 0.1.0
