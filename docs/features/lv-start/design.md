@@ -62,6 +62,9 @@ The relevant configuration shape includes:
 - `lark.features_table_feature_id_field`
 - `lark.features_table_title_field`
 - `lark.features_table_project_field`
+- `lark.status_field`
+- `lark.in_dev_status_value`
+- `lark.sync_status`
 - `default_branch`
 - `default_branch_type`
 - `branch_types`
@@ -79,6 +82,7 @@ Key supporting functions and interfaces are:
 - `getTenantAccessToken(appId, appSecret)` in `src/tools/lark.ts`
 - `fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, projectField, token)` in `src/tools/lark.ts`
 - `updateTicketFeatureId(ticket, newFeatureIds, baseId, tableId, featureIdField, token)` in `src/tools/lark.ts`
+- `updateTicketStatus(ticket, newStatus, baseId, tableId, statusField, token)` in `src/tools/lark.ts`
 - `syncFeatureToLarkTable(config, larkToken, featureId, title, projectRecordIds?)` in `src/tools/lark.ts`
 - `allocateFeatureIds(repoRoot, count, prefix, digits)` in `src/engine/feature-id.ts`
 - `listExistingFeatures(repoRoot)` in `src/engine/feature-id.ts`
@@ -87,7 +91,6 @@ Key supporting functions and interfaces are:
 - `writeState(repoRoot, changeId, state)` in `src/engine/state-io.ts`
 - `createBranch(repoRoot, branchName, fromBranch)` in `src/integrations/git/client.ts`
 - `commitAll(repoRoot, message)` in `src/integrations/git/client.ts`
-- `push(repoRoot, branchName)` in `src/integrations/git/client.ts`
 
 `src/index.ts` exposes the command as `lv start [ticket-id]` with options `--type <type>` and `--description <description>`.
 
@@ -100,7 +103,7 @@ Key supporting functions and interfaces are:
 - Allow inline feature doc generation for missing feature directories so ticket-driven starts can bootstrap feature documentation in the same run.
 - Pause for confirmation after generating docs, because those files are meant to be reviewed before they are committed.
 - Use best-effort write-back to Lark for allocated Feature IDs and feature-table records, since write permissions may not always be available.
+- Update ticket status as a separate best-effort Lark write, and only when status syncing is enabled.
 - Create the branch before writing state and committing so the resulting state and commit are anchored to the intended branch.
 - Use a single YAML state file as the change-context source of truth.
 - Stage all changes before commit, which means `lv start` can include unrelated uncommitted files if they exist in the working tree.
-- Treat push as best effort so the local branch and committed state remain usable even without remote access.

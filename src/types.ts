@@ -39,6 +39,15 @@ export const LarkConfigSchema = z.object({
   // from the originating ticket's `project_field` link when a feature is created via
   // `lv start` for a ticket.
   features_table_project_field: z.string().default("Project"),
+  // Column holding the ticket's status (a single-select field), read and written as a
+  // plain string.
+  status_field: z.string().default("Status"),
+  // Value written to `status_field` by `lv start` once work begins.
+  in_dev_status_value: z.string().default("In Dev"),
+  // Whether `lv start` writes `in_dev_status_value` back to the ticket's status field when
+  // it isn't already set to that value. Requires the app's tenant token to carry Bitable
+  // write scope.
+  sync_status: z.boolean().default(true),
 });
 
 export const ModelsConfigSchema = z.object({

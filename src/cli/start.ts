@@ -10,6 +10,7 @@ import {
   fetchTicket,
   getTenantAccessToken,
   updateTicketFeatureId,
+  updateTicketStatus,
   syncFeatureToLarkTable,
 } from "../tools/lark.js";
 import { createBranch, commitAll, push } from "../integrations/git/client.js";
@@ -303,6 +304,33 @@ async function startFromTicket(
         `Lark sync disabled (lark.sync_feature_id: false) — ${newlyAllocatedFeatureIds.join(", ")} ${newlyAllocatedFeatureIds.length > 1 ? "are" : "is"} local-only.`,
       );
     }
+  }
+
+  if (config.lark.sync_status) {
+    const currentStatus = ticket.rawFields[config.lark.status_field];
+    if (currentStatus !== config.lark.in_dev_status_value) {
+      try {
+        await updateTicketStatus(
+          ticket,
+          config.lark.in_dev_status_value,
+          config.lark.base_id,
+          config.lark.table_id,
+          config.lark.status_field,
+          larkToken,
+        );
+        printSuccess(
+          `Updated ticket ${ticketId} status to "${config.lark.in_dev_status_value}".`,
+        );
+      } catch (err) {
+        printWarn(
+          `Failed to update ticket ${ticketId} status to "${config.lark.in_dev_status_value}": ${(err as Error).message}. Continuing.`,
+        );
+      }
+    }
+  } else {
+    printInfo(
+      `Lark status sync disabled (lark.sync_status: false) — ticket ${ticketId}'s status is unchanged.`,
+    );
   }
 
   printInfo(`Creating branch ${branchName}...`);

@@ -33,6 +33,18 @@ lark:
   # created via `lv start`; left unset for `lv bootstrap` runs with no ticket.
   # features_table_project_field: "Project"
 
+  # Column holding the ticket's status (a single-select field), and the value
+  # `lv start` writes there once work begins. Default column name "Status",
+  # default value "In Dev".
+  # status_field: "Status"
+  # in_dev_status_value: "In Dev"
+
+  # Whether `lv start` writes in_dev_status_value back to the ticket's status
+  # field when it isn't already set to that value. Requires the app's tenant
+  # token to carry Bitable write scope. Default true; set false to leave the
+  # ticket's status untouched.
+  # sync_status: true
+
 default_branch: main
 
 # Branch naming per type — {ticket_id} and {summary} are the only placeholders

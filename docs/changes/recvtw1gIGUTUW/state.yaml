@@ -1,0 +1,10 @@
+ticket_id: recvtw1gIGUTUW
+title: >-
+  `lv start` should update the ticket status to `In Dev` (configurable) if it's
+  not in this status
+description: ''
+feature_ids:
+  - lv-start
+branch: feature/recvtw1gIGUTUW-lv-start-should-update-the-ticket-status-to-in-dev
+created_at: '2026-08-27T16:51:04.103Z'
+lv_version: 0.1.0
