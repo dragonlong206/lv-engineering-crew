@@ -155,6 +155,39 @@ export async function updateTicketFeatureId(
 }
 
 /**
+ * Writes the ticket's status field to `newStatus`. Unlike `updateTicketFeatureId()`, this is a
+ * plain string replace — the status field is a single-select, not a list/comma-joined field —
+ * so there's no existing-value shape to preserve or append to.
+ *
+ * Throws on failure — callers that want this to be non-fatal (e.g. `lv start`) should catch it.
+ */
+export async function updateTicketStatus(
+  ticket: LarkTicket,
+  newStatus: string,
+  baseId: string,
+  tableId: string,
+  statusField: string,
+  token: string,
+): Promise<void> {
+  const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records/${ticket.id}`;
+
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({ fields: { [statusField]: newStatus } }),
+  });
+
+  const data = (await response.json()) as { code: number; msg?: string };
+
+  if (!response.ok || data.code !== 0) {
+    throw new Error(`Lark update error ${data.code ?? response.status}: ${data.msg ?? 'unknown error'}`);
+  }
+}
+
+/**
  * Creates a record for a newly created feature in a dedicated Lark Base Features table. The
  * Features table is separate from the ticket/task table and carries no reference back to a
  * ticket — the record holds the feature ID, title, and (when `projectRecordIds` is given and
