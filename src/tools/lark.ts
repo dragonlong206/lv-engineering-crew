@@ -8,7 +8,25 @@ export interface LarkTicket {
   title: string;
   description: string;
   featureIds: string[];
+  projectRecordIds: string[];
   rawFields: Record<string, unknown>;
+}
+
+/**
+ * Extracts linked record IDs from a Bitable link-field's read value (single-link or
+ * duplex-link), which comes back as an array of `{ record_ids, table_id, text, text_arr }`
+ * objects — `record_ids` is omitted entirely when the link is empty. Returns `[]` for any
+ * other shape (unset field, or a field that isn't a link type).
+ */
+function extractLinkRecordIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids: string[] = [];
+  for (const entry of value) {
+    if (entry && typeof entry === 'object' && Array.isArray((entry as { record_ids?: unknown }).record_ids)) {
+      ids.push(...(entry as { record_ids: string[] }).record_ids);
+    }
+  }
+  return ids;
 }
 
 /**
@@ -42,6 +60,7 @@ export async function fetchTicket(
   tableId: string,
   featureIdField: string,
   titleField: string,
+  projectField: string,
   token: string,
 ): Promise<LarkTicket> {
   const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records/${ticketId}`;
@@ -85,7 +104,9 @@ export async function fetchTicket(
   const description = typeof fields['Description'] === 'string' ? fields['Description'] :
     typeof fields['description'] === 'string' ? fields['description'] : '';
 
-  return { id: ticketId, title, description, featureIds, rawFields: fields };
+  const projectRecordIds = extractLinkRecordIds(fields[projectField]);
+
+  return { id: ticketId, title, description, featureIds, projectRecordIds, rawFields: fields };
 }
 
 /**
@@ -136,9 +157,11 @@ export async function updateTicketFeatureId(
 /**
  * Creates a record for a newly created feature in a dedicated Lark Base Features table. The
  * Features table is separate from the ticket/task table and carries no reference back to a
- * ticket — the record holds only the feature ID and title. Column names come from
- * `LarkConfigSchema`'s `features_table_*_field` settings, so they can be pointed at whatever
- * an existing Features table actually calls those columns.
+ * ticket — the record holds the feature ID, title, and (when `projectRecordIds` is given and
+ * non-empty) the same Projects-table link the originating ticket carries, since the Features
+ * table has its own independent link field to that same Projects table. Column names come
+ * from `LarkConfigSchema`'s `features_table_*_field` settings, so they can be pointed at
+ * whatever an existing Features table actually calls those columns.
  *
  * Throws on failure — `syncFeatureToLarkTable()` below is the non-fatal wrapper callers use.
  */
@@ -148,12 +171,19 @@ export async function createFeatureRecord(
   baseId: string,
   tableId: string,
   token: string,
-  fieldNames: Pick<Config['lark'], 'features_table_feature_id_field' | 'features_table_title_field'>,
+  fieldNames: Pick<
+    Config['lark'],
+    'features_table_feature_id_field' | 'features_table_title_field' | 'features_table_project_field'
+  >,
+  projectRecordIds?: string[],
 ): Promise<void> {
   const fields: Record<string, unknown> = {
     [fieldNames.features_table_feature_id_field]: featureId,
     [fieldNames.features_table_title_field]: title,
   };
+  if (projectRecordIds && projectRecordIds.length > 0) {
+    fields[fieldNames.features_table_project_field] = projectRecordIds;
+  }
 
   const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records`;
 
@@ -229,6 +259,7 @@ export async function syncFeatureToLarkTable(
   larkToken: string,
   featureId: string,
   title: string,
+  projectRecordIds?: string[],
 ): Promise<void> {
   if (!config.lark.features_table_id) return;
   if (!config.lark.sync_new_features) return;
@@ -250,6 +281,7 @@ export async function syncFeatureToLarkTable(
       config.lark.features_table_id,
       larkToken,
       config.lark,
+      projectRecordIds,
     );
     printInfo(`Synced feature ${featureId} to Lark Features table.`);
   } catch (err) {
@@ -268,10 +300,11 @@ export const larkTicketTool = createTool({
     tableId: z.string(),
     featureIdField: z.string(),
     titleField: z.string(),
+    projectField: z.string(),
     token: z.string(),
   }),
-  execute: async ({ ticketId, baseId, tableId, featureIdField, titleField, token }) => {
-    const ticket = await fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, token);
+  execute: async ({ ticketId, baseId, tableId, featureIdField, titleField, projectField, token }) => {
+    const ticket = await fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, projectField, token);
     return ticket;
   },
 });

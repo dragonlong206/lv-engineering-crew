@@ -4,6 +4,10 @@ lark:
   feature_id_field: "Feature ID" # column name for feature IDs in Lark Base
   title_field: "Title" # column name used as the ticket title (branch {summary}, analysis prompt)
 
+  # Column holding the ticket's link to the Projects table. Read when a feature is
+  # created via `lv start`, so its value can be carried onto the new Feature record.
+  # project_field: "Project"
+
   # Whether `lv start` writes a feature ID it allocates for a brand-new feature
   # back to the ticket's Feature ID field above. Requires the app's tenant token
   # to carry Bitable write scope. Default true; set false to keep allocations local-only.
@@ -23,6 +27,11 @@ lark:
   # table is separate from the ticket/task table and carries no ticket reference.
   # features_table_feature_id_field: "Feature ID"
   # features_table_title_field: "Title"
+
+  # Column on the Features table holding its own link to the Projects table.
+  # Populated from the originating ticket's project_field link when a feature is
+  # created via `lv start`; left unset for `lv bootstrap` runs with no ticket.
+  # features_table_project_field: "Project"
 
 default_branch: main
 

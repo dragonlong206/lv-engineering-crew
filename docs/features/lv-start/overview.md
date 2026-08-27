@@ -2,18 +2,20 @@
 
 # lv start
 
-`lv start` creates a new change context under `docs/changes/<change-id>/state.yaml`, prepares a Git branch for that change, and commits the resulting context state. It supports two entry modes: starting from a Lark Base ticket ID, or starting from free text via `--description`. Ticket mode fetches the ticket from Lark, uses the ticket title in the branch name, records the ticket-backed context in state, and can write newly allocated feature IDs back to the ticket. Description mode skips Lark, derives a short title from the first line of the description, and creates the same state and branch workflow from local text.
+`lv start` creates the change context for a new LV workflow run. It writes `docs/changes/<change-id>/state.yaml`, creates a Git branch for that change, and commits the resulting context state. The command can start either from a Lark Base ticket ID or from free text via `--description`.
+
+Ticket-based starts fetch the ticket from Lark Base, use the ticket title in the branch name, record the ticket data in state, and can write newly allocated feature IDs back to the ticket. Description-based starts skip Lark, derive a short title from the first line of the description, and follow the same branch and state workflow from local text.
 
 ## Main components
 
 - `src/index.ts` registers `lv start [ticket-id]` with `--type <type>` and `--description <description>`.
-- `src/cli/start.ts` contains `runStart()` plus the ticket-based and description-based entry paths.
+- `src/cli/start.ts` contains `runStart()` and the ticket-based and description-based entry paths.
 - `src/tools/lark.ts` fetches tickets from Lark Base, updates a ticket's Feature ID field, and syncs feature records to the Lark Features table when configured.
 - `src/engine/branch-naming.ts` renders branch names from configured patterns and slugifies summaries.
 - `src/engine/feature-id.ts` allocates new feature IDs from the repository's existing feature namespace and lists existing feature docs for matching.
 - `src/cli/bootstrap.ts` generates feature docs for missing feature directories during start.
 - `src/engine/state-io.ts` writes `docs/changes/<change-id>/state.yaml`.
-- `src/integrations/git/client.ts` creates the branch, stages all changes, commits, and attempts to push.
+- `src/integrations/git/client.ts` creates the branch, stages all changes, commits, and can push the branch.
 - `src/config.ts` resolves repository paths and loads `.lv.yaml` and `.lv.local.yaml`.
 - `src/types.ts` defines the persisted state and config schemas, including the Lark sync flags.
 
@@ -37,7 +39,7 @@
 - `--type` selects a branch type from `branch_types`, or from the built-in defaults when `branch_types` is unset.
 - Ticket-based starts use the ticket ID as the change ID in state and commit messages.
 - Description-based starts derive the change ID from the first line of the description, slugified with underscores instead of hyphens so it can stand in for `{ticket_id}` in branch patterns.
-- A ticket with no Feature ID can still start a change. The command will try to reuse an existing feature first, then infer and allocate new feature IDs if needed.
+- A ticket with no Feature ID can still start a change. The command tries to reuse an existing feature first, then infer and allocate new feature IDs if needed.
 - Missing feature docs are generated only for feature directories that do not already exist, and the command pauses for confirmation before continuing.
 - `commitAll()` stages every dirty path in the repository, so unrelated local changes can be included in the `lv start` commit.
 - Git push failures are tolerated and leave the local branch and commit in place.

@@ -28,7 +28,7 @@ The system SHALL NOT create a second Features table record for a feature ID that
 - **WHEN** `lv bootstrap <feature-id>` is run for a feature ID that already has a record in the Lark Features table
 - **THEN** the system does not create a duplicate record in the Features table
 
-### Requirement: Record includes feature ID and title only
+### Requirement: Record includes feature ID and title, with no ticket-referencing data
 The system SHALL populate the created Features table record with the feature ID and a title, and SHALL NOT write any ticket-referencing data to it — the Features table has no column for a ticket reference, regardless of which command or context triggered the feature's creation.
 
 #### Scenario: Feature created via lv start for a ticket
@@ -38,6 +38,21 @@ The system SHALL populate the created Features table record with the feature ID 
 #### Scenario: Feature created via lv bootstrap with no ticket context
 - **WHEN** a new feature is created by running `lv bootstrap <feature-id>` directly, outside of any `lv start` run
 - **THEN** the created Features table record includes the feature ID and a title
+
+### Requirement: Record inherits the originating ticket's Project link
+The system SHALL, when a feature is created via `lv start` for a ticket whose Project link field is populated, carry that same Projects-table link onto the new Features table record's own Project link field. The Features table's Project field is an independent link to the same Projects table the ticket's Project field links to, not a value copied from the ticket record itself.
+
+#### Scenario: Ticket has a Project link
+- **WHEN** a new feature is created via `lv start <ticket-id>` and the ticket's Project field links to one or more Projects-table records
+- **THEN** the created Features table record's Project field links to the same Projects-table record(s)
+
+#### Scenario: Ticket has no Project link
+- **WHEN** a new feature is created via `lv start <ticket-id>` and the ticket's Project field is empty
+- **THEN** the created Features table record's Project field is left unset
+
+#### Scenario: Feature created via lv bootstrap with no ticket context
+- **WHEN** a new feature is created by running `lv bootstrap <feature-id>` directly, outside of any `lv start` run
+- **THEN** the created Features table record's Project field is left unset, since there is no ticket to read a Project link from
 
 ### Requirement: Sync is configurable and best-effort
 The system SHALL provide a configuration setting controlling whether new features are synced to the Lark Features table, and SHALL NOT fail the invoking command if the sync fails.

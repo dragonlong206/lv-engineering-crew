@@ -163,6 +163,7 @@ async function startFromTicket(
     config.lark.table_id,
     config.lark.feature_id_field,
     config.lark.title_field,
+    config.lark.project_field,
     larkToken,
   );
 
@@ -273,6 +274,7 @@ async function startFromTicket(
       larkToken,
       featureId,
       newFeatureTitles.get(featureId) ?? ticket.title,
+      ticket.projectRecordIds,
     );
   }
 
