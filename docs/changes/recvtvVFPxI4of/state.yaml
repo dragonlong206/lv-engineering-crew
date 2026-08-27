@@ -1,0 +1,13 @@
+ticket_id: recvtvVFPxI4of
+title: '''lv start` allow user to resume or restart if the git branch exists'
+description: >-
+  When run `lv start`, if the git branch of the task exists, stop to ask user if
+  resume or restart.
+
+  Note that there is a case that the branch exists without any documents or
+  changes. In this case, we need to resume to create state.yaml file.
+feature_ids:
+  - lv-start
+branch: feature/recvtvVFPxI4of-lv-start-allow-user-to-resume-or-restart-if-the-gi
+created_at: '2026-08-27T17:55:25.990Z'
+lv_version: 0.1.0
