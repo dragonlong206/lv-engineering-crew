@@ -12,7 +12,7 @@ npm run build
 npm link                          # installs the `lv` binary globally
 
 cd /path/to/target-repo
-cp .lv.local.yaml.sample .lv.local.yaml   # then fill in configs and real credentials — file is gitignored — see Configuration below
+cp /path/to/lv-engineer-crew-repo/.lv.local.yaml.sample .lv.local.yaml   # then fill in configs and real credentials — file is gitignored — see Configuration below
 lv init --tool claude             # install/configure OpenSpec, wire it to LV's context
 lv bootstrap <feature-id> --description "feature description"  # generate feature docs from an existing codebase that doesn't have any yet
 lv start <ticket-id>             #  fetch the ticket from Lark, create docs/changes/<ticket-id>/state.yaml
