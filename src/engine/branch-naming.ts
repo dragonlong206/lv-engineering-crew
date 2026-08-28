@@ -1,4 +1,5 @@
 import type { Config } from '../types.js';
+import { listBranchesMatching } from '../integrations/git/client.js';
 
 export const TICKET_PLACEHOLDER = '{ticket_id}';
 export const SUMMARY_PLACEHOLDER = '{summary}';
@@ -113,10 +114,33 @@ export function matchBranch(config: Config, branchName: string): BranchMatch | n
   return null;
 }
 
-/** Git ref globs (one per branch type) matching any ticket ID, for listing existing ticket branches. */
+/**
+ * Git ref globs (one per branch type) matching any ticket ID, for listing existing ticket
+ * branches. Only the literal prefix up to {ticket_id} is kept, with a single trailing `*` —
+ * not a glob per-placeholder — because renderBranchName() drops the separator before {summary}
+ * entirely when no summary is given (e.g. every description-based start's branch), so a glob
+ * that requires that separator's literal text would never match those branches. matchBranch()
+ * does the precise filtering afterward, so over-matching here (e.g. an unrelated branch that
+ * happens to share the prefix) is harmless.
+ */
 export function branchGlobs(config: Config): string[] {
   const types = getBranchTypes(config);
   return Object.values(types)
     .filter((pattern) => pattern.includes(TICKET_PLACEHOLDER))
-    .map((pattern) => pattern.replace(TICKET_PLACEHOLDER, '*').replace(SUMMARY_PLACEHOLDER, '*'));
+    .map((pattern) => `${pattern.slice(0, pattern.indexOf(TICKET_PLACEHOLDER))}*`);
+}
+
+/**
+ * All branches (local or on origin) belonging to the given change ID, across every configured
+ * branch type — ignores `{summary}` (and which `{type}` was used) so it finds a change's branch
+ * regardless of how it was originally named. Shared by `lv resume` (to check out a change's
+ * branch) and `lv start` (to detect an already-existing branch before creating one).
+ */
+export async function findChangeBranches(
+  repoRoot: string,
+  config: Config,
+  changeId: string,
+): Promise<string[]> {
+  const all = await listBranchesMatching(repoRoot, branchGlobs(config));
+  return all.filter((b) => matchBranch(config, b)?.ticketId === changeId);
 }

@@ -21,6 +21,12 @@ export async function createBranch(repoRoot: string, branchName: string, fromBra
   await git(['checkout', '-b', branchName], repoRoot);
 }
 
+/** Discards a local branch (used by `lv start`'s restart path) — checks out `fromBranch` first, since a branch can't be deleted while checked out, then force-deletes `branchName`. */
+export async function discardLocalBranch(repoRoot: string, branchName: string, fromBranch: string): Promise<void> {
+  await git(['checkout', fromBranch], repoRoot);
+  await git(['branch', '-D', branchName], repoRoot);
+}
+
 export async function stageAll(repoRoot: string): Promise<void> {
   await git(['add', '-A'], repoRoot);
 }
