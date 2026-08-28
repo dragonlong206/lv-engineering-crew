@@ -26,6 +26,35 @@ export async function promptSelect(question: string, options: string[]): Promise
 }
 
 /**
+ * Prints a numbered list of items and lets the engineer accept them as-is (Enter) or replace
+ * the selection by typing a reply, parsed by `parseReplacement` into the kept item set. Shared
+ * by `confirmFeatureSplit()` (replace with arbitrary new titles) and the existing-feature match
+ * confirmation (narrow to a subset of the shown candidates, or none).
+ */
+export async function confirmSelection<T>(
+  items: T[],
+  opts: {
+    header: string;
+    formatLabel: (item: T, index: number) => string;
+    promptText: string;
+    parseReplacement: (raw: string, items: T[]) => T[];
+  },
+): Promise<T[]> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+  console.log(opts.header);
+  items.forEach((item, i) => console.log(`  ${i + 1}) ${opts.formatLabel(item, i)}`));
+
+  const answer = await rl.question(opts.promptText);
+  rl.close();
+
+  const trimmed = answer.trim();
+  if (trimmed.length === 0) return items;
+
+  return opts.parseReplacement(trimmed, items);
+}
+
+/**
  * Prints the inferred new-feature titles and lets the engineer accept them as-is (Enter) or
  * replace the whole list with a comma-separated set of titles. Returns the confirmed titles —
  * never empty: a blank or all-commas reply falls back to the inferred list rather than
@@ -34,27 +63,23 @@ export async function promptSelect(question: string, options: string[]): Promise
 export async function confirmFeatureSplit(
   inferred: { title: string }[],
 ): Promise<string[]> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const selected = await confirmSelection(inferred, {
+    header:
+      inferred.length > 1
+        ? `This looks like it introduces ${inferred.length} features:`
+        : `This looks like it introduces 1 feature:`,
+    formatLabel: (f) => f.title,
+    promptText: `Press Enter to accept, or type a comma-separated list of titles to replace it: `,
+    parseReplacement: (raw) => {
+      const replaced = raw
+        .split(',')
+        .map((t) => t.trim())
+        .filter(Boolean);
+      return replaced.length > 0 ? replaced.map((title) => ({ title })) : inferred;
+    },
+  });
 
-  console.log(
-    inferred.length > 1
-      ? `This looks like it introduces ${inferred.length} features:`
-      : `This looks like it introduces 1 feature:`,
-  );
-  inferred.forEach((f, i) => console.log(`  ${i + 1}) ${f.title}`));
-
-  const answer = await rl.question(
-    `Press Enter to accept, or type a comma-separated list of titles to replace it: `,
-  );
-  rl.close();
-
-  const replaced = answer
-    .trim()
-    .split(',')
-    .map((t) => t.trim())
-    .filter(Boolean);
-
-  return replaced.length > 0 ? replaced : inferred.map((f) => f.title);
+  return selected.map((f) => f.title);
 }
 
 /**

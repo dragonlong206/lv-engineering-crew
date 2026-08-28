@@ -34,6 +34,7 @@ import {
   printError,
   printWarn,
   confirm,
+  confirmSelection,
   confirmFeatureSplit,
   promptSelect,
   promptResumeOrRestart,
@@ -61,20 +62,20 @@ const featureSplitAgent = new Agent({
 });
 
 /**
- * Suggests an existing feature the given change might belong to, so `lv start` can offer it
- * instead of defaulting straight to "this is new." Returns `undefined` when there are no
+ * Suggests existing features the given change might belong to, so `lv start` can offer them
+ * instead of defaulting straight to "this is new." Returns an empty array when there are no
  * existing features with docs to compare against (no LLM call is made in that case), when the
- * model found no confident match, or when it returned an ID outside the candidate list.
+ * model found no confident matches, or when it returned only IDs outside the candidate list.
  */
 async function matchExistingFeature(
   config: Config,
   repoRoot: string,
   title: string,
   description: string,
-): Promise<ExistingFeature | undefined> {
+): Promise<ExistingFeature[]> {
   const candidates = listExistingFeatures(repoRoot);
 
-  if (candidates.length === 0) return undefined;
+  if (candidates.length === 0) return [];
 
   const model = getModelForStep(config, "bootstrap");
   const result = await featureMatchAgent.generate(
@@ -83,12 +84,11 @@ async function matchExistingFeature(
       model,
     },
   );
-  const { featureId } = extractJson<{ featureId: string | null }>(
+  const { featureIds } = extractJson<{ featureIds: string[] }>(
     extractText(result),
   );
-  if (!featureId) return undefined;
 
-  return candidates.find((c) => c.id === featureId);
+  return candidates.filter((c) => featureIds.includes(c.id));
 }
 
 /**
@@ -120,6 +120,32 @@ function summarize(feature: ExistingFeature): string {
     .map((l) => l.trim())
     .find((l) => l.length > 0);
   return line ?? feature.id;
+}
+
+/**
+ * Shows every matched existing feature and lets the engineer keep all (Enter), a comma-
+ * separated subset of IDs, or none (typing "none", or a reply that matches no shown ID).
+ * Returns the confirmed subset — may be empty, meaning no match should be used.
+ */
+async function confirmFeatureMatches(
+  matches: ExistingFeature[],
+): Promise<ExistingFeature[]> {
+  return confirmSelection(matches, {
+    header:
+      matches.length > 1
+        ? `Looks like this matches ${matches.length} existing features:`
+        : `Looks like this matches an existing feature:`,
+    formatLabel: (m) => `${m.id} — ${summarize(m)}`,
+    promptText: `Press Enter to use all of them, type a comma-separated list of IDs to use a subset, or 'none' to skip: `,
+    parseReplacement: (raw, items) => {
+      if (raw.trim().toLowerCase() === "none") return [];
+      const keepIds = raw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return items.filter((item) => keepIds.includes(item.id));
+    },
+  });
 }
 
 export interface StartOptions {
@@ -252,23 +278,20 @@ async function startFromTicket(
     printInfo(
       `Ticket ${ticketId} has no feature ID. Checking for existing features that match this change...`,
     );
-    const match = await matchExistingFeature(
+    const candidates = await matchExistingFeature(
       config,
       repoRoot,
       ticket.title,
       ticket.description,
     );
-    let matched: ExistingFeature | undefined;
-    if (match) {
-      const proceed = await confirm(
-        `Looks like this matches ${match.id} (${summarize(match)}). Use it? [y/N] `,
-      );
-      if (proceed) matched = match;
-    }
+    const matched =
+      candidates.length > 0 ? await confirmFeatureMatches(candidates) : [];
 
-    if (matched) {
-      printInfo(`Using existing feature ${matched.id}.`);
-      featureIds = [matched.id];
+    if (matched.length > 0) {
+      printInfo(
+        `Using existing feature${matched.length > 1 ? "s" : ""} ${matched.map((m) => m.id).join(", ")}.`,
+      );
+      featureIds = matched.map((m) => m.id);
     } else {
       const inferred = await inferFeatureSplit(
         config,
@@ -443,19 +466,19 @@ async function startFromDescription(
   const existingBranchName = existing.existingBranchName;
 
   let featureIds: string[] = [];
-  const match = await matchExistingFeature(
+  const candidates = await matchExistingFeature(
     config,
     repoRoot,
     title,
     description,
   );
-  if (match) {
-    const proceed = await confirm(
-      `Looks like this matches ${match.id} (${summarize(match)}). Use it? [y/N] `,
-    );
-    if (proceed) {
-      printInfo(`Using existing feature ${match.id}.`);
-      featureIds = [match.id];
+  if (candidates.length > 0) {
+    const matched = await confirmFeatureMatches(candidates);
+    if (matched.length > 0) {
+      printInfo(
+        `Using existing feature${matched.length > 1 ? "s" : ""} ${matched.map((m) => m.id).join(", ")}.`,
+      );
+      featureIds = matched.map((m) => m.id);
     }
   }
 

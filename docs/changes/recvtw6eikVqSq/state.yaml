@@ -8,4 +8,5 @@ feature_ids:
 branch: feature/recvtw6eikVqSq-lv-start-when-find-features-to-match-can-suggest-m
 created_at: '2026-08-28T08:54:42.218Z'
 lv_version: 0.1.0
-openspec_changes: []
+openspec_changes:
+  - lv-start-suggest-multiple-matched-features

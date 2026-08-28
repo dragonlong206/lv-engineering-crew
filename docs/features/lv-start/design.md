@@ -12,15 +12,20 @@ The code is organized into these layers:
 - Workflow orchestration in `src/cli/start.ts`
 - Configuration and repository path resolution in `src/config.ts`
 - Ticket retrieval, ticket update, and feature-record sync in `src/tools/lark.ts`
-- Branch naming and branch matching in `src/engine/branch-naming.ts`
-- Feature ID allocation and feature discovery in `src/engine/feature-id.ts`
+- Branch naming, branch rendering, and branch matching in `src/engine/branch-naming.ts`
+- Feature ID allocation and existing feature discovery in `src/engine/feature-id.ts`
 - Inline feature doc generation in `src/cli/bootstrap.ts`
 - State persistence in `src/engine/state-io.ts`
 - Git operations in `src/integrations/git/client.ts`
+- Shared interactive prompting and JSON parsing helpers in `src/cli/helpers.ts`
 
-The ticket-based path is linear but has a decision point when no Feature ID is present. It first attempts to match the change against an existing feature, then falls back to inferring one or more new feature titles and allocating matching feature IDs. Missing feature docs are generated before the branch creation is finalized, and the user must confirm before the command proceeds. Description-based starts bypass Lark calls and use the free-text description to produce a change ID, branch name, and state file.
+The workflow has three major control paths:
 
-There is also a resume-aware path at the top of the flow. Before any Lark or LLM work, `lv start` checks whether a branch already exists for the change ID and either resumes it, restarts it by deleting the branch, or continues on the existing branch name when state is not yet present.
+- Ticket-based start, which fetches Lark data and may write back to Lark.
+- Description-based start, which avoids Lark entirely and uses free text to build the change context.
+- Resume-aware start, which detects existing branches for the same change ID and lets the engineer resume or restart before any external side effects happen.
+
+Within the ticket-based path, there is a decision point when the ticket has no Feature ID. The command first tries to match the change against existing features, then falls back to inferring one or more new feature titles and allocating matching feature IDs. If any referenced feature directory is missing locally, feature docs are generated inline and the command asks for confirmation before it proceeds. Those generated docs are then treated the same as other feature docs for subsequent Lark sync.
 
 ## Data model / schema
 
@@ -36,7 +41,7 @@ There is also a resume-aware path at the top of the flow. Before any Lark or LLM
 - `rawFields: Record<string, unknown>`
 - `featureIdFieldIsLink: boolean`
 
-`fetchTicket()` reads the ticket record from the configured Lark Base table, detects whether the configured Feature ID column is a link field by inspecting field metadata, and extracts feature IDs accordingly. For link fields, it reads linked record text from `text_arr`. For non-link fields, it accepts comma-separated strings or string arrays. It also extracts project link record IDs from the configured project field and preserves the raw record fields for later updates.
+`fetchTicket()` reads the record from the configured Lark Base table, checks whether the configured Feature ID column is a Bitable Link field by inspecting field metadata, and extracts feature IDs accordingly. For link fields it reads linked record text from `text_arr`; for non-link fields it accepts comma-separated strings or string arrays. It also extracts project link record IDs from the configured project field and preserves the raw fields for later updates.
 
 ### Persisted state
 
@@ -49,6 +54,9 @@ There is also a resume-aware path at the top of the flow. Before any Lark or LLM
 - `branch`
 - `created_at`
 - `lv_version`
+- `openspec_changes` with a default of `[]`
+
+`writeState()` creates the `docs/changes/<change-id>/` directory if needed and serializes the schema as YAML. `readState()` is used during resume handling to determine whether the branch already has persisted context.
 
 ### Configuration
 
@@ -90,28 +98,30 @@ Key supporting functions and interfaces are:
 - `allocateFeatureIds(repoRoot, count, prefix, digits)` in `src/engine/feature-id.ts`
 - `listExistingFeatures(repoRoot)` in `src/engine/feature-id.ts`
 - `renderBranchName(config, ticketId, { type?, summary? })` in `src/engine/branch-naming.ts`
-- `generateFeatureDocsFromScan(config, repoRoot, featureId, hint)` in `src/cli/bootstrap.ts`
-- `writeState(repoRoot, changeId, state)` in `src/engine/state-io.ts`
+- `findChangeBranches(repoRoot, config, changeId)` in `src/engine/branch-naming.ts`
 - `createBranch(repoRoot, branchName, fromBranch)` in `src/integrations/git/client.ts`
 - `checkoutBranch(repoRoot, branchName)` in `src/integrations/git/client.ts`
 - `discardLocalBranch(repoRoot, branchName, fromBranch)` in `src/integrations/git/client.ts`
 - `commitAll(repoRoot, message)` in `src/integrations/git/client.ts`
-- `push(repoRoot, branchName)` in `src/integrations/git/client.ts`
+- `writeState(repoRoot, changeId, state)` in `src/engine/state-io.ts`
+- `confirmSelection()` and `confirmFeatureSplit()` in `src/cli/helpers.ts`
+- `generateFeatureDocsFromScan(config, repoRoot, featureId, hint)` in `src/cli/bootstrap.ts`
 
 `src/index.ts` exposes the command as `lv start [ticket-id]` with options `--type <type>` and `--description <description>`.
 
 ## Key design decisions
 
 - Support both ticket-backed and free-text starts through one command so the change-context workflow stays consistent.
-- Resolve the branch name from the ticket title only after the ticket is fetched, since the title is part of the branch summary.
-- Treat a missing ticket Feature ID as a recoverable state rather than an error, and try to reuse existing feature docs before allocating new IDs.
-- Allocate multiple feature IDs when inference suggests a split, rather than forcing every start to map to exactly one feature.
-- Allow inline feature doc generation for missing feature directories so ticket-driven starts can bootstrap feature documentation in the same run.
-- Pause for confirmation after generating docs, because those files are meant to be reviewed before they are committed.
-- Use best-effort write-back to Lark for allocated Feature IDs and feature-table records, since write permissions may not always be available.
-- Detect whether the ticket's Feature ID field is a Link field from Lark metadata, because link fields require resolved `record_id`s rather than plain text values.
-- Update ticket status as a separate best-effort Lark write, and only when status syncing is enabled.
-- Create the branch before writing state and committing so the resulting state and commit are anchored to the intended branch.
-- Use a single YAML state file as the change-context source of truth.
-- Stage all changes before commit, which means `lv start` can include unrelated uncommitted files if they exist in the working tree.
-- Support resume-or-restart behavior up front so rerunning `lv start` on an in-progress change does not immediately fail on branch creation.
+- Resolve the branch name after loading the ticket, because the ticket title is part of the rendered branch summary.
+- Treat a missing ticket Feature ID as recoverable instead of failing the command, and try to reuse existing feature docs before allocating new IDs.
+- Allow multiple feature IDs when the change appears to span multiple new features, rather than forcing every start to map to exactly one feature.
+- Generate inline feature docs for missing feature directories so ticket-driven starts can bootstrap documentation in the same run.
+- Pause for confirmation after generating docs, because those files are intended to be reviewed before commit.
+- Sync features to the Lark Features table independently of ticket write-back, so existing docs can still be backfilled into Lark.
+- Detect whether the ticket Feature ID column is a Link field from Lark metadata, because link fields require resolved record IDs rather than plain text values.
+- Perform ticket status update as a separate best-effort write and only when status syncing is enabled.
+- Check for existing branches before Lark or feature-matching work so rerunning `lv start` on an in-progress change can resume cheaply.
+- Create the branch before writing state and committing so the resulting context is anchored to the intended branch.
+- Use a single YAML state file as the source of truth for the change context.
+- Stage all changes before commit, which means `lv start` can include unrelated dirty files if they are present in the working tree.
+- Keep Lark writes non-fatal so the local LV context can still be created even when ticket sync or feature-table sync fails.
