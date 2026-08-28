@@ -97,10 +97,10 @@ Description: ${description || "(none)"}
 
 ${candidateBlocks}
 
-Decide whether the change above is clearly more work on exactly one of these existing features. Only pick one if you are confident it's the same feature, not just a related or similar one — when in doubt, answer null.
+List every existing feature this change is clearly more work on, not just something related or similar. This is usually zero or one — only list more than one when the change plainly spans multiple existing features. When in doubt about a candidate, leave it out.
 
 Return ONLY strict JSON matching this shape — no surrounding text, no code fences:
-{"featureId": "<id-of-the-matching-feature-or-null>"}`;
+{"featureIds": ["<id-of-a-matching-feature>", ...]}`;
 }
 
 // ---------------------------------------------------------------------------
