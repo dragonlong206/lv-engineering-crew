@@ -11,6 +11,10 @@ export const StateSchema = z.object({
   branch: z.string(),
   created_at: z.string(),
   lv_version: z.string(),
+  // Names of the OpenSpec change(s) created for this LV change — not derivable from the
+  // change ID by convention, and one LV change can spawn more than one OpenSpec change.
+  // Populated by `lv link`, called by `/opsx:propose` after `openspec new change`.
+  openspec_changes: z.array(z.string()).default([]),
 });
 export type State = z.infer<typeof StateSchema>;
 

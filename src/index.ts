@@ -60,6 +60,14 @@ program
     await runStatus().catch(die);
   });
 
+program
+  .command('link <openspec-change-name>')
+  .description('Record an OpenSpec change name against the current change')
+  .action(async (openspecChangeName: string) => {
+    const { runLink } = await import('./cli/link.js');
+    await runLink(openspecChangeName).catch(die);
+  });
+
 function die(err: unknown): void {
   console.error('Error:', err instanceof Error ? err.message : String(err));
   process.exit(1);

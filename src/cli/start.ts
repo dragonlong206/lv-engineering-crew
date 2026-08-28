@@ -418,6 +418,7 @@ async function startFromTicket(
     branch: branchName,
     created_at: now,
     lv_version: LV_VERSION,
+    openspec_changes: [],
   };
   writeState(repoRoot, ticketId, state);
 
@@ -479,6 +480,7 @@ async function startFromDescription(
     branch: branchName,
     created_at: now,
     lv_version: LV_VERSION,
+    openspec_changes: [],
   };
   writeState(repoRoot, changeId, state);
 

@@ -23,3 +23,11 @@ export function writeState(repoRoot: string, changeId: string, state: State): vo
 export function stateExists(repoRoot: string, changeId: string): boolean {
   return fs.existsSync(path.join(getChangesDir(repoRoot, changeId), 'state.yaml'));
 }
+
+/** Idempotently records an OpenSpec change name against a change's persisted state. */
+export function addOpenspecChange(repoRoot: string, changeId: string, openspecChangeName: string): void {
+  const state = readState(repoRoot, changeId);
+  if (state.openspec_changes.includes(openspecChangeName)) return;
+  state.openspec_changes = [...state.openspec_changes, openspecChangeName];
+  writeState(repoRoot, changeId, state);
+}

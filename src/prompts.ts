@@ -157,6 +157,13 @@ export const ARCHIVE_GUIDANCE =
 export const PROPOSE_STATE_AUTOLOAD_LINE =
   "LV Crew: before asking, check for a `docs/changes/<change-id>/state.yaml` whose `branch` field matches the current git branch. If one exists, use its `title` to derive the kebab-case change name and its `description` as the change description below, skipping the question entirely. Only ask the user if no matching `state.yaml` exists, or it has no usable title/description.";
 
+// Patched into the generated `/opsx:propose` workflow file(s) by `addProposeLinkInstruction()`
+// in init.ts, as a new line inserted right after that workflow's "Create the change directory"
+// step creates the OpenSpec change. Records the new change against LV's own change context so
+// `lv status` can later report on it — see `lv-status/openspec-next-action`.
+export const PROPOSE_LINK_CHANGE_LINE =
+  'LV Crew: after `openspec new change` succeeds, check for a `docs/changes/<change-id>/state.yaml` whose `branch` field matches the current git branch. If one exists, run `lv link "<name>"` (the name just used for `openspec new change`) to record this OpenSpec change against it. Skip this step if no matching `state.yaml` exists.';
+
 export function buildBootstrapScanPrompt(
   featureId: string,
   repoRoot: string,

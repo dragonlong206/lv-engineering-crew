@@ -1,8 +1,10 @@
 <!-- AUTO-GENERATED — not yet verified. Review and edit before committing. -->
 
+<!-- AUTO-GENERATED — verified from repository code. -->
+
 # lv status
 
-`lv status` prints the current change context for the branch you are on. It is a read-only command that resolves the current branch to a change ID, loads that change's `state.yaml`, and prints a short summary.
+`lv status` prints the current change context for the branch you are on. It is a read-only command that resolves the active branch to a change ID, loads that change's `state.yaml`, and prints a short human-readable summary. It also emits OpenSpec next-action guidance for any OpenSpec changes recorded in the persisted state.
 
 ## Purpose
 
@@ -13,7 +15,8 @@ The command exists so an engineer can quickly inspect the persisted change state
 - `src/cli/status.ts` runs the command.
 - `src/engine/branch-naming.ts` is used to recognize the current branch and recover the change's ticket ID.
 - `src/engine/state-io.ts` reads `state.yaml` from `docs/changes/<change-id>/`.
-- `src/cli/status.ts` also contains `printStateSummary()`, which formats the output and is reused by `lv resume`.
+- `src/cli/status.ts` contains `printStateSummary()`, which formats the output and is reused by `lv resume`.
+- `src/integrations/openspec/client.ts` is queried for per-change OpenSpec next actions after the summary is printed.
 
 ## High-level flow
 
@@ -23,7 +26,9 @@ The command exists so an engineer can quickly inspect the persisted change state
 4. If the branch is not a change branch, print an error and exit non-zero.
 5. Use the matched ticket ID as the change ID.
 6. Read `docs/changes/<change-id>/state.yaml`.
-7. Print a summary containing the change ID, ticket ID when present, title, description, feature IDs, branch, created time, and LV version.
+7. Print the state summary for that change.
+8. Inspect `state.openspec_changes` and print a next-action suggestion for each recorded OpenSpec change.
+9. If no OpenSpec changes are recorded, print a single prompt to start planning.
 
 ## Constraints and assumptions
 
@@ -32,6 +37,7 @@ The command exists so an engineer can quickly inspect the persisted change state
 - `state.yaml` must exist and must conform to `StateSchema`; otherwise `readState()` throws.
 - The output is intentionally minimal and text-based. It is not a machine-readable API.
 - `ticket_id` is optional in the stored state, so status may print a change ID without a separate ticket field.
+- OpenSpec guidance is best-effort. If OpenSpec status lookup fails for a change name, the command prints a fallback message instead of failing the whole command.
 
 ## Current state of the code
 
@@ -46,4 +52,12 @@ The command exists so an engineer can quickly inspect the persisted change state
 - `Created`
 - `Version`
 
-It does not print step progress, iterations, token counts, durations, approvals, or any per-step workflow fields. The persisted state schema currently contains only the change metadata fields above plus `lv_version`.
+After that, it prints OpenSpec next actions based on `state.openspec_changes`:
+
+- no recorded OpenSpec changes: `Next action: run /opsx:propose to start planning.`
+- incomplete OpenSpec change: prints the remaining next steps returned by `getChangeStatus()`
+- complete but not yet applied: suggests `/opsx:apply` with the remaining task count
+- complete and fully applied: suggests `/opsx:archive`
+- lookup failure: prints that the next action could not be determined
+
+It does not print step progress, iterations, token counts, durations, approvals, or any per-step workflow fields. The persisted state schema currently contains only the change metadata fields above plus `openspec_changes` and `lv_version`.

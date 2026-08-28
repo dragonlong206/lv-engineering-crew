@@ -66,6 +66,8 @@ When the user is ready to implement, they must start the apply workflow explicit
    ```
    This creates a scaffolded change in the planning home resolved by the CLI with `.openspec.yaml`.
 
+   LV Crew: after `openspec new change` succeeds, check for a `docs/changes/<change-id>/state.yaml` whose `branch` field matches the current git branch. If one exists, run `lv link "<name>"` (the name just used for `openspec new change`) to record this OpenSpec change against it. Skip this step if no matching `state.yaml` exists.
+
 4. **Get the artifact build order**
    ```bash
    openspec status --change "<name>" --json
