@@ -13,9 +13,15 @@ import {
   updateTicketStatus,
   syncFeatureToLarkTable,
 } from "../tools/lark.js";
-import { createBranch, commitAll, push } from "../integrations/git/client.js";
-import { writeState } from "../engine/state-io.js";
-import { renderBranchName, slugify } from "../engine/branch-naming.js";
+import {
+  createBranch,
+  checkoutBranch,
+  discardLocalBranch,
+  commitAll,
+  push,
+} from "../integrations/git/client.js";
+import { writeState, readState, stateExists } from "../engine/state-io.js";
+import { renderBranchName, slugify, findChangeBranches } from "../engine/branch-naming.js";
 import {
   allocateFeatureIds,
   listExistingFeatures,
@@ -29,9 +35,12 @@ import {
   printWarn,
   confirm,
   confirmFeatureSplit,
+  promptSelect,
+  promptResumeOrRestart,
   extractText,
   extractJson,
 } from "./helpers.js";
+import { printStateSummary } from "./status.js";
 import { buildFeatureMatchPrompt, buildFeatureSplitPrompt } from "../prompts.js";
 import { LV_VERSION, type Config, type State } from "../types.js";
 
@@ -118,6 +127,55 @@ export interface StartOptions {
   description?: string;
 }
 
+/**
+ * Checks whether a branch for `changeId` already exists and, if so, walks the engineer through
+ * resuming or restarting instead of letting the later `createBranch()` call fail on
+ * `git checkout -b`. Runs before any Lark/LLM calls so a clean resume costs nothing extra.
+ *
+ * Returns `{ action: "resumed" }` when the change already has `state.yaml` — the caller should
+ * stop immediately, same as `lv resume` would. Otherwise returns `{ action: "continue" }`, with
+ * `existingBranchName` set when the caller should check out that branch instead of creating a
+ * new one (resume with no `state.yaml` yet) — left undefined when there was no existing branch,
+ * or the engineer chose to restart and it was discarded.
+ */
+async function resolveExistingBranch(
+  repoRoot: string,
+  config: Config,
+  changeId: string,
+): Promise<{ action: "resumed" } | { action: "continue"; existingBranchName?: string }> {
+  const candidates = await findChangeBranches(repoRoot, config, changeId);
+  if (candidates.length === 0) return { action: "continue" };
+
+  const branchName =
+    candidates.length === 1
+      ? candidates[0]
+      : await promptSelect(
+          `Multiple branches found for change '${changeId}'. Which one?`,
+          candidates,
+        );
+
+  const choice = await promptResumeOrRestart(branchName);
+  if (choice === "restart") {
+    await discardLocalBranch(repoRoot, branchName, config.default_branch);
+    return { action: "continue" };
+  }
+
+  printInfo(`Checking out ${branchName}...`);
+  await checkoutBranch(repoRoot, branchName);
+
+  if (stateExists(repoRoot, changeId)) {
+    const state = readState(repoRoot, changeId);
+    printSuccess(`Resumed ${changeId}`);
+    printStateSummary(changeId, state);
+    console.log(
+      `\nContinue with your coding agent's OpenSpec workflow (e.g. /opsx:propose or /opsx:apply).`,
+    );
+    return { action: "resumed" };
+  }
+
+  return { action: "continue", existingBranchName: branchName };
+}
+
 export async function runStart(
   ticketId: string | undefined,
   opts: StartOptions = {},
@@ -145,6 +203,10 @@ async function startFromTicket(
   const config = loadConfig();
   const repoRoot = getRepoRoot();
 
+  const existing = await resolveExistingBranch(repoRoot, config, ticketId);
+  if (existing.action === "resumed") return;
+  const existingBranchName = existing.existingBranchName;
+
   if (!config.lark_app_id || !config.lark_app_secret) {
     printError(
       "Missing Lark app credentials. Set 'lark_app_id' and 'lark_app_secret' in .lv.local.yaml (or LARK_APP_ID/LARK_APP_SECRET env vars).",
@@ -168,12 +230,16 @@ async function startFromTicket(
     larkToken,
   );
 
-  // Branch name embeds the ticket title as a summary slug, so it's rendered
-  // once we have the ticket in hand rather than up front.
-  const branchName = renderBranchName(config, ticketId, {
-    type: opts.type,
-    summary: ticket.title,
-  });
+  // Branch name embeds the ticket title as a summary slug, so it's rendered once we have the
+  // ticket in hand rather than up front — unless we're resuming on an already-checked-out
+  // branch (no state.yaml yet), in which case we keep that branch's actual name rather than
+  // rendering a possibly-different one.
+  const branchName =
+    existingBranchName ??
+    renderBranchName(config, ticketId, {
+      type: opts.type,
+      summary: ticket.title,
+    });
 
   // A ticket with no Feature ID yet is treated as introducing one or more new features —
   // allocate IDs for them now rather than requiring the ticket to be set in Lark first. But
@@ -336,8 +402,12 @@ async function startFromTicket(
     );
   }
 
-  printInfo(`Creating branch ${branchName}...`);
-  await createBranch(repoRoot, branchName, config.default_branch);
+  if (existingBranchName) {
+    printInfo(`Continuing on existing branch ${existingBranchName}...`);
+  } else {
+    printInfo(`Creating branch ${branchName}...`);
+    await createBranch(repoRoot, branchName, config.default_branch);
+  }
 
   const now = new Date().toISOString();
   const state: State = {
@@ -367,6 +437,10 @@ async function startFromDescription(
   const title = deriveTitle(description);
   const changeId = changeIdSlug(title) || `change_${Date.now()}`;
 
+  const existing = await resolveExistingBranch(repoRoot, config, changeId);
+  if (existing.action === "resumed") return;
+  const existingBranchName = existing.existingBranchName;
+
   let featureIds: string[] = [];
   const match = await matchExistingFeature(
     config,
@@ -385,11 +459,17 @@ async function startFromDescription(
   }
 
   // changeId is already a slug of the title, so it doubles as {summary} too — passing
-  // `title` again as `summary` would duplicate it in the rendered branch name.
-  const branchName = renderBranchName(config, changeId, { type: opts.type });
+  // `title` again as `summary` would duplicate it in the rendered branch name. Unless we're
+  // resuming on an already-checked-out branch, in which case keep its actual name.
+  const branchName =
+    existingBranchName ?? renderBranchName(config, changeId, { type: opts.type });
 
-  printInfo(`Creating branch ${branchName}...`);
-  await createBranch(repoRoot, branchName, config.default_branch);
+  if (existingBranchName) {
+    printInfo(`Continuing on existing branch ${existingBranchName}...`);
+  } else {
+    printInfo(`Creating branch ${branchName}...`);
+    await createBranch(repoRoot, branchName, config.default_branch);
+  }
 
   const now = new Date().toISOString();
   const state: State = {

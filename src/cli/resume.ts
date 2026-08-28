@@ -1,6 +1,6 @@
 import { loadConfig, getRepoRoot } from '../config.js';
 import { readState } from '../engine/state-io.js';
-import { matchBranch, branchGlobs, renderBranchName } from '../engine/branch-naming.js';
+import { matchBranch, branchGlobs, renderBranchName, findChangeBranches } from '../engine/branch-naming.js';
 import { checkoutBranch, currentBranch, listBranchesMatching } from '../integrations/git/client.js';
 import { printInfo, printSuccess, printError, promptSelect } from './helpers.js';
 import { printStateSummary } from './status.js';
@@ -11,9 +11,7 @@ export async function runResume(ticketId?: string): Promise<void> {
 
   let resolvedChangeId: string;
   if (ticketId) {
-    const candidates = (await listBranchesMatching(repoRoot, branchGlobs(config))).filter(
-      (b) => matchBranch(config, b)?.ticketId === ticketId,
-    );
+    const candidates = await findChangeBranches(repoRoot, config, ticketId);
 
     let branchName: string;
     if (candidates.length === 1) {

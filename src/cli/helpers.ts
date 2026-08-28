@@ -57,6 +57,27 @@ export async function confirmFeatureSplit(
   return replaced.length > 0 ? replaced : inferred.map((f) => f.title);
 }
 
+/**
+ * Asks the engineer whether to resume or restart a change whose branch already exists —
+ * separate from a generic confirm()/promptSelect() so the destructive nature of restart
+ * (discarding the branch's local history) is stated up front rather than folded into a
+ * generic yes/no.
+ */
+export async function promptResumeOrRestart(branchName: string): Promise<'resume' | 'restart'> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  console.log(`Branch '${branchName}' already exists for this change.`);
+  console.log(`  1) Resume — check out the existing branch and continue`);
+  console.log(`  2) Restart — discard the branch's local history and start over`);
+
+  let choice = NaN;
+  while (choice !== 1 && choice !== 2) {
+    const answer = await rl.question(`Select 1-2: `);
+    choice = Number(answer.trim());
+  }
+  rl.close();
+  return choice === 1 ? 'resume' : 'restart';
+}
+
 export function openEditor(filePath: string): void {
   const editor =
     process.env['EDITOR'] ??
