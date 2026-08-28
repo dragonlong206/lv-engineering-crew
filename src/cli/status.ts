@@ -2,6 +2,7 @@ import { loadConfig, getRepoRoot } from '../config.js';
 import { readState } from '../engine/state-io.js';
 import { matchBranch } from '../engine/branch-naming.js';
 import { currentBranch } from '../integrations/git/client.js';
+import { getChangeStatus, getApplyProgress } from '../integrations/openspec/client.js';
 import { printError } from './helpers.js';
 import type { State } from '../types.js';
 
@@ -19,6 +20,36 @@ export async function runStatus(): Promise<void> {
 
   const state = readState(repoRoot, changeId);
   printStateSummary(changeId, state);
+  await printNextActions(repoRoot, state);
+}
+
+/** Prints a next-action suggestion per OpenSpec change tracked in `state.openspec_changes`. */
+async function printNextActions(repoRoot: string, state: State): Promise<void> {
+  if (state.openspec_changes.length === 0) {
+    console.log('Next action: run /opsx:propose to start planning.');
+    console.log('');
+    return;
+  }
+
+  for (const name of state.openspec_changes) {
+    console.log(`OpenSpec change: ${name}`);
+    try {
+      const { isComplete, nextSteps } = await getChangeStatus(repoRoot, name);
+      if (!isComplete) {
+        console.log(`  Next action: ${nextSteps.join(' ')}`);
+        continue;
+      }
+      const { remaining } = await getApplyProgress(repoRoot, name);
+      if (remaining > 0) {
+        console.log(`  Next action: run /opsx:apply to continue implementation (${remaining} task(s) remaining).`);
+      } else {
+        console.log('  Next action: run /opsx:archive — all tasks complete.');
+      }
+    } catch {
+      console.log(`  Next action: could not be determined (OpenSpec status lookup failed for '${name}').`);
+    }
+  }
+  console.log('');
 }
 
 /** Shared by `lv status` and `lv resume` — dumps a change's state.yaml context. */

@@ -8,6 +8,7 @@ import {
   CONTEXT_POINTER_LINES,
   ARCHIVE_GUIDANCE,
   PROPOSE_STATE_AUTOLOAD_LINE,
+  PROPOSE_LINK_CHANGE_LINE,
 } from "../prompts.js";
 
 export interface InitOptions {
@@ -69,6 +70,7 @@ export async function runInit(opts: InitOptions): Promise<void> {
   addContextPointer(repoRoot);
   addArchiveGuidance(repoRoot);
   addProposeStateAutoload(repoRoot);
+  addProposeLinkInstruction(repoRoot);
 
   printSuccess("OpenSpec installed and wired to LV context.");
   console.log(`\nNext: run 'lv start <ticket-id>' or 'lv start --description "..."' to begin a change.`);
@@ -216,6 +218,48 @@ function addProposeStateAutoload(repoRoot: string): void {
     const indent = match[1];
     const insertion = `${indent}${PROPOSE_STATE_AUTOLOAD_LINE}\n\n`;
     const patched = raw.slice(0, match.index) + insertion + raw.slice(match.index);
+    fs.writeFileSync(filePath, patched, "utf-8");
+  }
+}
+
+// Matches the line that reports the OpenSpec change was created, in step 3 ("Create the change
+// directory") of the generated `/opsx:propose` workflow — right after the `openspec new change`
+// code block. The new instruction is inserted immediately after this line, at the same
+// indentation, so it reads as the last thing that happens once the change actually exists.
+const PROPOSE_CHANGE_CREATED_LINE_RE =
+  /^( *)This creates a scaffolded change in the planning home resolved by the CLI with `\.openspec\.yaml`\.$/m;
+
+/**
+ * Idempotently patches the generated `/opsx:propose` workflow file(s) so they record the
+ * OpenSpec change they just created against LV's own change context, by running `lv link
+ * "<name>"` — see `PROPOSE_LINK_CHANGE_LINE`. Like `addProposeStateAutoload()`, this can't be
+ * done via `openspec/config.yaml`'s `context:` pointer (only surfaced once an artifact's
+ * `openspec instructions` is read, after the change is already created) and must be re-applied
+ * by re-running `lv init` whenever `openspec update`/`openspec init --force` regenerates these
+ * files from scratch.
+ */
+function addProposeLinkInstruction(repoRoot: string): void {
+  for (const relPath of PROPOSE_WORKFLOW_FILES) {
+    const filePath = path.join(repoRoot, relPath);
+    if (!fs.existsSync(filePath)) continue;
+
+    const raw = fs.readFileSync(filePath, "utf-8");
+    if (normalizeWhitespace(raw).includes(normalizeWhitespace(PROPOSE_LINK_CHANGE_LINE))) {
+      continue; // already patched
+    }
+
+    const match = raw.match(PROPOSE_CHANGE_CREATED_LINE_RE);
+    if (!match || match.index === undefined) {
+      printError(
+        `Could not find the propose workflow's "change created" step in ${filePath} — skipping link-instruction patch. The file may have changed shape upstream.`,
+      );
+      continue;
+    }
+
+    const indent = match[1];
+    const insertAt = match.index + match[0].length;
+    const insertion = `\n\n${indent}${PROPOSE_LINK_CHANGE_LINE}`;
+    const patched = raw.slice(0, insertAt) + insertion + raw.slice(insertAt);
     fs.writeFileSync(filePath, patched, "utf-8");
   }
 }
