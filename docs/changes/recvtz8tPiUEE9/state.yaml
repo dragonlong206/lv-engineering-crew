@@ -1,0 +1,11 @@
+ticket_id: recvtz8tPiUEE9
+title: Add UI design document to feature context
+description: >-
+  Some tickets have UI design: Figma link, HTML prototype, image or PDF. The
+  workflow needs to analyze the UI design and then add it to the proposal.
+feature_ids:
+  - lv-start
+branch: feature/recvtz8tPiUEE9-add-ui-design-document-to-feature-context
+created_at: '2026-09-05T15:51:42.470Z'
+lv_version: 0.1.0
+openspec_changes: []
