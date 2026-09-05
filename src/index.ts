@@ -38,7 +38,7 @@ program
 program
   .command('init')
   .description('Install and configure OpenSpec for a coding agent, wired to LV context')
-  .option('--tool <tool>', 'Coding agent to install OpenSpec for (passed to `openspec init --tools`; omit to choose interactively)')
+  .option('--tool <tool>', 'Coding agent to install OpenSpec for (passed to `openspec init --tools`; omit to choose interactively). For multiple tools, quote the comma-separated value (e.g. --tool "claude,codex") — PowerShell parses an unquoted comma itself before it reaches this CLI.')
   .action(async (opts: { tool?: string }) => {
     const { runInit } = await import('./cli/init.js');
     await runInit(opts).catch(die);
