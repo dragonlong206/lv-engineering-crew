@@ -39,11 +39,13 @@ Both additions are checked using whitespace-normalized string comparison so reru
 - `runInit(opts: { tool?: string })` in `src/cli/init.ts`
 - `addContextPointer(repoRoot: string)` in `src/cli/init.ts`
 - `addArchiveGuidance(repoRoot: string)` in `src/cli/init.ts`
-- `isOpenSpecInstalled()` in `src/cli/init.ts`
+- `isOpenSpecInstalled(): boolean` in `src/cli/init.ts` — synchronous, resolves `openspec` via `which.sync("openspec", { nothrow: true })` instead of spawning `openspec --version` and inspecting the error shape
 - `CONTEXT_POINTER_LINES` and `ARCHIVE_GUIDANCE` in `src/prompts.ts`
 
 ## Key design decisions
 
+- `isOpenSpecInstalled()` checks `PATH` directly via the `which` package (added as a direct dependency, mirroring the same resolver `execa`'s own dependency `cross-spawn` uses internally) instead of spawning `openspec --version` and inferring "not installed" from the shape of the resulting error. The latter is unreliable on Windows: `execa`/`cross-spawn` relay a missing executable through `cmd.exe`, and whether the rejection carries `code: "ENOENT"` depends on an emulation layer that doesn't always fire — confirmed by a captured Windows repro (`ExecaError`, `exitCode: 1`, no `code` property at all). `which.sync(..., { nothrow: true })` never throws, so any check failure (not just "genuinely absent") is folded into "not installed"; the install prompt is worded "not found or not installed properly" to reflect that.
+- The `openspec init` invocation uses fanned-out stdio (`stdout: "inherit"`, `stderr: ["pipe", "inherit"]`) so its output still streams live to the terminal while also being captured — a plain `stdio: "inherit"` config (the original implementation) prevents execa from ever populating `err.stderr`, which would make appending it to failure messages silently useless. On failure, the captured `stderr` is appended to the printed error alongside `err.message`.
 - OpenSpec is treated as the agent-specific integration layer, so LV avoids maintaining its own coding-agent matrix.
 - LV updates only OpenSpec’s project-level config rather than rewriting generated command or skill files.
 - The config patches are idempotent and line-aware, so rerunning `lv init` can fill in missing lines without duplicating existing text.

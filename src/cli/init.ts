@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
 import { execa } from "execa";
+import which from "which";
 import { getRepoRoot } from "../config.js";
 import { printInfo, printSuccess, printError, confirm } from "./helpers.js";
 import {
@@ -23,23 +24,23 @@ function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-/** Resolves `false` only for "executable not found" (ENOENT); any other failure re-throws. */
-async function isOpenSpecInstalled(): Promise<boolean> {
-  try {
-    await execa("openspec", ["--version"]);
-    return true;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw err;
-  }
+/**
+ * Resolves `openspec` on PATH directly instead of inferring "not installed" from the shape of a
+ * spawn error — `execa`/`cross-spawn`'s ENOENT emulation on Windows relays through `cmd.exe` and
+ * doesn't reliably surface `err.code === "ENOENT"` for a missing executable (see design.md of
+ * lv-init-does-not-install-openspec-on-windows). `which` is the same resolver cross-spawn itself
+ * uses, so this matches what `execa` would actually attempt to spawn on any platform.
+ */
+function isOpenSpecInstalled(): boolean {
+  return which.sync("openspec", { nothrow: true }) !== null;
 }
 
 export async function runInit(opts: InitOptions): Promise<void> {
   const repoRoot = getRepoRoot();
 
-  if (!(await isOpenSpecInstalled())) {
+  if (!isOpenSpecInstalled()) {
     const proceed = await confirm(
-      `OpenSpec CLI not found. Install ${OPENSPEC_PACKAGE} globally now? (y/N) `,
+      `OpenSpec CLI not found or not installed properly. Install ${OPENSPEC_PACKAGE} globally now? (y/N) `,
     );
     if (!proceed) {
       printInfo(`Skipping install. Run 'npm install -g ${OPENSPEC_PACKAGE}' manually, then re-run 'lv init'.`);
@@ -61,9 +62,17 @@ export async function runInit(opts: InitOptions): Promise<void> {
   if (opts.tool) args.push("--tools", opts.tool);
 
   try {
-    await execa("openspec", args, { cwd: repoRoot, stdio: "inherit" });
+    await execa("openspec", args, {
+      cwd: repoRoot,
+      stdout: "inherit",
+      // Fan out to both a live terminal stream and execa's own capture, so the failure
+      // message below can include `stderr` without losing real-time progress output.
+      stderr: ["pipe", "inherit"],
+    });
   } catch (err) {
-    printError(`OpenSpec install failed: ${(err as Error).message}`);
+    const stderr = (err as { stderr?: string }).stderr;
+    const detail = stderr ? `\n${stderr}` : "";
+    printError(`OpenSpec install failed: ${(err as Error).message}${detail}`);
     process.exit(1);
   }
 

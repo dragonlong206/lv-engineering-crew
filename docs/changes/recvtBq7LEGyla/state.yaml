@@ -6,4 +6,5 @@ feature_ids:
 branch: feature/recvtBq7LEGyla-lv-init-does-not-install-openspec-on-windows
 created_at: '2026-09-05T12:26:57.778Z'
 lv_version: 0.1.0
-openspec_changes: []
+openspec_changes:
+  - lv-init-does-not-install-openspec-on-windows

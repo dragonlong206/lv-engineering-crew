@@ -13,8 +13,8 @@
 ## High-level flow
 
 1. `lv init` resolves the repository root.
-2. It checks whether the `openspec` executable is available.
-3. If OpenSpec is missing, it prompts to install `@fission-ai/openspec` globally with `npm`.
+2. It checks whether the `openspec` executable is available by resolving it on `PATH` directly (via the `which` package), rather than inferring "not installed" from the shape of a failed `execa("openspec", ["--version"])` call — the latter is unreliable on Windows, where a missing executable doesn't always surface a distinguishable error.
+3. If OpenSpec is missing (or the check can't cleanly tell it apart from "installed but broken"), it prompts to install `@fission-ai/openspec` globally with `npm`.
 4. It runs `openspec init <repoRoot>` and passes `--tools <tool>` when `--tool` is provided.
 5. After installation, it patches `openspec/config.yaml` with two idempotent additions:
    - a `context:` block that points OpenSpec at LV feature docs and the current change state
@@ -24,6 +24,8 @@
 ## Constraints and assumptions
 
 - The command depends on the `openspec` CLI being available on the PATH, or installable globally via `npm`.
+- Detection can't distinguish "genuinely not installed" from "the check itself failed for some other reason" (e.g. an unreadable `PATH` entry) — both are treated as "not installed" and offered the same install prompt, worded "not found or not installed properly" to reflect that ambiguity.
+- When `openspec init` itself fails, the printed error includes the captured stderr from the failed command in addition to the exception message.
 - `--tool` is optional. When omitted, `openspec init` runs without `--tools` and can use OpenSpec’s own interactive selection.
 - The config edits are intended to be idempotent, including partial re-runs where only some lines are missing.
 - Fresh-template handling preserves OpenSpec’s scaffold comments by appending raw YAML when the relevant top-level key is still commented out.
