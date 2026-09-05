@@ -16,4 +16,4 @@
 
 - [x] 4.1 Run `npx tsc --noEmit` and `npm run build` and confirm both succeed
 - [x] 4.2 Run `lv init` end-to-end against a scratch repo on this machine (POSIX) to confirm no regression in the existing install/prompt flow
-- [ ] 4.3 Verify on Windows: with `openspec` removed from `PATH`, confirm `lv init` now detects it as missing and offers the install prompt instead of crashing with the `ExecaError` captured in this change's Why/Context
+- [x] 4.3 Verify on Windows: with `openspec` removed from `PATH`, confirm `lv init` now detects it as missing and offers the install prompt instead of crashing with the `ExecaError` captured in this change's Why/Context

@@ -26,6 +26,7 @@
 - The command depends on the `openspec` CLI being available on the PATH, or installable globally via `npm`.
 - Detection can't distinguish "genuinely not installed" from "the check itself failed for some other reason" (e.g. an unreadable `PATH` entry) — both are treated as "not installed" and offered the same install prompt, worded "not found or not installed properly" to reflect that ambiguity.
 - When `openspec init` itself fails, the printed error includes the captured stderr from the failed command in addition to the exception message.
+- `--tool` forwards its value verbatim as a single argv token to `openspec init --tools`; on PowerShell an unquoted comma-separated value (e.g. `--tool claude,codex`) gets parsed by PowerShell itself before it reaches this CLI, so multiple tools must be quoted (`--tool "claude,codex"`).
 - `--tool` is optional. When omitted, `openspec init` runs without `--tools` and can use OpenSpec’s own interactive selection.
 - The config edits are intended to be idempotent, including partial re-runs where only some lines are missing.
 - Fresh-template handling preserves OpenSpec’s scaffold comments by appending raw YAML when the relevant top-level key is still commented out.
