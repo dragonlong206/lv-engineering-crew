@@ -84,3 +84,8 @@ feature_id_digits: 4
 # stack the default doesn't cover, e.g.:
 # scan_extensions: [cs, vb, cshtml, razor, csproj, sln, json, xml, config]
 # scan_skip_dirs: [bin, obj, .vs, packages, node_modules, .git]
+
+# Language generated artifact prose should be written in — both OpenSpec
+# workflow output (proposal/specs/design/tasks) and `lv bootstrap`'s own docs.
+# Free text passed through to the LLM as-is. Omit for no language constraint.
+output_language: "English"

@@ -4,18 +4,18 @@
 
 ## Architecture and layers
 
-`lv init` is a small orchestration layer around three responsibilities:
+`lv init` is a thin orchestration layer around three responsibilities:
 
 1. delegate installation to the external `openspec` CLI
 2. post-process `openspec/config.yaml` to inject LV-specific guidance
-3. patch generated OpenSpec workflow files so they cooperate with LV’s change-tracking conventions
+3. patch generated OpenSpec workflow files so they cooperate with LV change tracking
 
-The CLI entry point lives in `src/index.ts`, which dispatches to `runInit()` in `src/cli/init.ts`. Reusable instruction text is centralized in `src/prompts.ts`, keeping the command implementation focused on file I/O and orchestration.
+The CLI entry point lives in `src/index.ts`, which dispatches to `runInit()` in `src/cli/init.ts`. Shared instruction text lives in `src/prompts.ts`, keeping the command implementation focused on file I/O and orchestration.
 
-The init implementation uses two update modes for `openspec/config.yaml`:
+The config update logic uses two modes:
 
 - raw append for fresh templates, so OpenSpec scaffold comments survive
-- YAML parse and rewrite for already-active keys, so existing user customizations can be merged structurally
+- YAML parse and rewrite for already-active keys, so existing user customization can be merged structurally
 
 ## Data model / schema
 
@@ -26,7 +26,8 @@ It writes or updates these parts of the file:
 - `context:` receives a multiline string containing:
   - a reminder to read `docs/features/<feature-id>/{overview.md,design.md}` for touched features
   - a pointer to `docs/changes/<change-id>/state.yaml` for the current change
-  - a convention, not an enforced check, to run `lv bootstrap <feature-id>` when syncing specs directly
+  - a convention, not an enforced check, to run `lv bootstrap <feature-id>` when syncing specs directly with `/opsx:sync`
+  - a reminder to honor `.lv.yaml`'s `output_language` setting when generating prose
 - `operations.archive.guidance:` receives one list item instructing archive workflows to refresh the docs of every touched feature before completing
 
 The command also patches generated `/opsx:propose` workflow files in these locations when they exist:
@@ -35,11 +36,11 @@ The command also patches generated `/opsx:propose` workflow files in these locat
 - `.claude/skills/openspec-propose/SKILL.md`
 - `.agents/skills/openspec-propose/SKILL.md`
 
-Those workflow patches insert LV-specific instructions around the existing OpenSpec steps:
+Those workflow patches insert LV-specific instructions around existing OpenSpec steps:
 
 - a line that autoloads `docs/changes/<change-id>/state.yaml` when the current git branch matches
 - a line that records the newly created OpenSpec change with `lv link "<name>"`
-- a line that checks `state.yaml` for a `ui_design` reference and, when creating the `proposal` artifact, attempts to inspect it and reflect that in proposal text
+- a line that checks `state.yaml` for a `ui_design` reference and, when writing `proposal`, attempts to inspect it and reflect that in proposal text
 
 ## APIs / interfaces
 

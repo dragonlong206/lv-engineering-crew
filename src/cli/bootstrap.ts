@@ -146,8 +146,8 @@ async function runBootstrapFromPaths(
   const model = getModelForStep(config, "bootstrap");
 
   const [overviewResult, designResult] = await Promise.all([
-    bootstrapAgent.generate(buildBootstrapOverviewPrompt(featureId, codeBlock), { model }),
-    bootstrapAgent.generate(buildBootstrapDesignPrompt(featureId, codeBlock), { model }),
+    bootstrapAgent.generate(buildBootstrapOverviewPrompt(featureId, codeBlock, config.output_language), { model }),
+    bootstrapAgent.generate(buildBootstrapDesignPrompt(featureId, codeBlock, config.output_language), { model }),
   ]);
 
   const overviewText = extractText(overviewResult);
@@ -209,8 +209,9 @@ export async function generateFeatureDocsFromScan(
     hint?.name,
     hint?.description,
     hint?.uiDesignRefs,
+    config.output_language,
   );
-  const scanAgent = createBootstrapScanAgent(config.scan_extensions, config.scan_skip_dirs);
+  const scanAgent = createBootstrapScanAgent(config.scan_extensions, config.scan_skip_dirs, config.output_language);
   const result = await scanAgent.generate(prompt, { model, maxSteps: 18 });
   const text = extractText(result);
   const parsed = extractJson<{ overviewMarkdown: string; designMarkdown: string }>(text);

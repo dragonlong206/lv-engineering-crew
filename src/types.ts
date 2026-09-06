@@ -87,6 +87,10 @@ export const ConfigSchema = z.object({
   lark_app_secret: z.string().optional(),
   openai_api_key: z.string().optional(),
   anthropic_api_key: z.string().optional(),
+  // Language (e.g. "Vietnamese", "English") that generated artifact prose — both OpenSpec
+  // workflow output and `lv bootstrap`'s own docs — should be written in. Free text, passed
+  // through to the LLM as-is; unset means no language constraint (current behavior).
+  output_language: z.string().optional(),
 });
 export type Config = z.infer<typeof ConfigSchema>;
 
