@@ -31,6 +31,7 @@ const bootstrapAgent = new Agent({
 export interface BootstrapScanHint {
   name?: string;
   description?: string;
+  uiDesignRefs?: string[];
 }
 
 /** First non-empty, non-comment line of generated overview.md, for a short human-readable title. */
@@ -207,6 +208,7 @@ export async function generateFeatureDocsFromScan(
     existingDesign,
     hint?.name,
     hint?.description,
+    hint?.uiDesignRefs,
   );
   const scanAgent = createBootstrapScanAgent(config.scan_extensions, config.scan_skip_dirs);
   const result = await scanAgent.generate(prompt, { model, maxSteps: 18 });

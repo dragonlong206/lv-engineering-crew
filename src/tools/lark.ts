@@ -9,6 +9,10 @@ export interface LarkTicket {
   description: string;
   featureIds: string[];
   projectRecordIds: string[];
+  // UI design reference(s) (Figma link, HTML prototype, image, or PDF), normalized via
+  // `normalizeUiDesignRefs()`. Empty when `ui_design_field` isn't configured or resolves to
+  // nothing — never undefined, so callers can check `.length` without an extra guard.
+  uiDesignRefs: string[];
   rawFields: Record<string, unknown>;
   // Whether `featureIdField` (the field named by `lark.feature_id_field`) is a Bitable Link
   // field, per `isLinkField()`. Determined once in `fetchTicket()` and carried on the ticket
@@ -49,6 +53,49 @@ function extractLinkTexts(value: unknown): string[] {
     }
   }
   return texts;
+}
+
+/**
+ * Normalizes a UI design column's raw read value — which may be a plain text/URL field, a
+ * `{text, link}`-shaped URL-type field, or a Lark attachment field (array of file objects) —
+ * into a flat list of reference strings. Unlike `feature_id_field`, this never needs to tell
+ * "empty link field" apart from "empty text field": both simply produce zero references, so a
+ * single shape-sniffing pass suffices without an `isLinkField()`-style metadata lookup. Drops
+ * (rather than throws on) any entry that resolves to nothing usable.
+ */
+function normalizeUiDesignRefs(value: unknown): string[] {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const { text, link } = value as { text?: unknown; link?: unknown };
+    const ref = (typeof link === 'string' && link.trim()) || (typeof text === 'string' && text.trim());
+    return ref ? [ref] : [];
+  }
+
+  if (Array.isArray(value)) {
+    const refs: string[] = [];
+    for (const entry of value) {
+      if (typeof entry === 'string') {
+        const trimmed = entry.trim();
+        if (trimmed) refs.push(trimmed);
+        continue;
+      }
+      if (entry && typeof entry === 'object') {
+        const { url, tmp_url, name } = entry as { url?: unknown; tmp_url?: unknown; name?: unknown };
+        const ref =
+          (typeof url === 'string' && url.trim()) ||
+          (typeof tmp_url === 'string' && tmp_url.trim()) ||
+          (typeof name === 'string' && name.trim());
+        if (ref) refs.push(ref);
+      }
+    }
+    return refs;
+  }
+
+  return [];
 }
 
 // Lark Bitable numeric field `type`s for a single-link and a duplex-link field, per
@@ -130,6 +177,7 @@ export async function fetchTicket(
   titleField: string,
   projectField: string,
   token: string,
+  uiDesignField?: string,
 ): Promise<LarkTicket> {
   const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records/${ticketId}`;
 
@@ -178,7 +226,18 @@ export async function fetchTicket(
 
   const projectRecordIds = extractLinkRecordIds(fields[projectField]);
 
-  return { id: ticketId, title, description, featureIds, projectRecordIds, rawFields: fields, featureIdFieldIsLink };
+  const uiDesignRefs = uiDesignField ? normalizeUiDesignRefs(fields[uiDesignField]) : [];
+
+  return {
+    id: ticketId,
+    title,
+    description,
+    featureIds,
+    projectRecordIds,
+    uiDesignRefs,
+    rawFields: fields,
+    featureIdFieldIsLink,
+  };
 }
 
 /**
@@ -453,9 +512,19 @@ export const larkTicketTool = createTool({
     titleField: z.string(),
     projectField: z.string(),
     token: z.string(),
+    uiDesignField: z.string().optional(),
   }),
-  execute: async ({ ticketId, baseId, tableId, featureIdField, titleField, projectField, token }) => {
-    const ticket = await fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, projectField, token);
+  execute: async ({ ticketId, baseId, tableId, featureIdField, titleField, projectField, token, uiDesignField }) => {
+    const ticket = await fetchTicket(
+      ticketId,
+      baseId,
+      tableId,
+      featureIdField,
+      titleField,
+      projectField,
+      token,
+      uiDesignField,
+    );
     return ticket;
   },
 });
