@@ -12,9 +12,18 @@ export const AUTO_GENERATED_HEADER = `<!-- AUTO-GENERATED — not yet verified. 
 // Bootstrap
 // ---------------------------------------------------------------------------
 
+// Appended as its own paragraph (not interleaved into the "should cover" bullet lists) when a
+// repo has `output_language` configured, so the instruction stays easy to grep/verify in
+// isolation. Scoped to descriptive prose — code blocks/identifiers/paths/commands stay as-is.
+export function buildOutputLanguageParagraph(outputLanguage?: string): string {
+  if (!outputLanguage) return "";
+  return `\n\nWrite all descriptive prose in ${outputLanguage}. Leave code blocks, identifiers, file paths, and command names untranslated; headings may stay in English.`;
+}
+
 export function buildBootstrapOverviewPrompt(
   featureId: string,
   codeBlock: string,
+  outputLanguage?: string,
 ): string {
   return `You are a systems analyst. Read the following code and generate an overview.md document for the feature '${featureId}'.
 
@@ -25,7 +34,7 @@ overview.md should cover:
 - Constraints and assumptions
 - Current state of the code
 
-Be concise. Return only the Markdown content — no surrounding text.
+Be concise. Return only the Markdown content — no surrounding text.${buildOutputLanguageParagraph(outputLanguage)}
 
 ## Code
 
@@ -35,6 +44,7 @@ ${codeBlock}`;
 export function buildBootstrapDesignPrompt(
   featureId: string,
   codeBlock: string,
+  outputLanguage?: string,
 ): string {
   return `You are a systems designer. Read the following code and generate a design.md document for the feature '${featureId}'.
 
@@ -44,7 +54,7 @@ design.md should cover:
 - APIs / interfaces
 - Key design decisions
 
-Be concise. Return only the Markdown content — no surrounding text.
+Be concise. Return only the Markdown content — no surrounding text.${buildOutputLanguageParagraph(outputLanguage)}
 
 ## Code
 
@@ -187,6 +197,7 @@ export const CONTEXT_POINTER_LINES = [
   "- the feature docs under `docs/features/<feature-id>/{overview.md,design.md}` for any feature IDs this change touches",
   "- the current change's ticket/description context in `docs/changes/<change-id>/state.yaml` (the directory matching the current git branch)",
   "- if you are running `/opsx:sync` directly (syncing delta specs to main specs without archiving), also refresh docs for any feature IDs this change touches by running `lv bootstrap <feature-id>` — this is a convention, not enforced by any tooling check",
+  "- also check `.lv.yaml` for an `output_language` setting; if set, write all generated artifact prose in that language — code blocks, identifiers, file paths, and command names stay untranslated, headings may stay in English",
 ];
 
 // Multi-line so it renders as a YAML block scalar (`context: |`) — kept short and generic
@@ -197,7 +208,7 @@ export const CONTEXT_POINTER = CONTEXT_POINTER_LINES.join("\n");
 // (`openspec instructions archive --change <name> --json`'s `operationGuidance` field) and
 // followed advisorily, never blocking the archive if ignored.
 export const ARCHIVE_GUIDANCE =
-  "Before completing this archive, refresh the docs of every feature this change touches by running `lv bootstrap <feature-id>`: use the feature IDs recorded in this change's `docs/changes/<change-id>/state.yaml` when present; otherwise, for each of this change's delta spec capability paths, treat its leading path segment as a feature ID and refresh it if a matching `docs/features/<id>/` directory exists.";
+  "When archiving, sync all delta to OpenSpec specs by default. Before completing this archive, refresh the docs of every feature this change touches by running `lv bootstrap <feature-id>`: use the feature IDs recorded in this change's `docs/changes/<change-id>/state.yaml` when present; otherwise, for each of this change's delta spec capability paths, treat its leading path segment as a feature ID and refresh it if a matching `docs/features/<id>/` directory exists.";
 
 // Patched into the generated `/opsx:propose` workflow file(s) by `addProposeStateAutoload()`
 // in init.ts, as a new line inserted right before that workflow's "ask the user" step. The
@@ -224,7 +235,7 @@ export const PROPOSE_LINK_CHANGE_LINE =
 // text. Explicitly names the `proposal` artifact so the instruction doesn't also apply when step
 // 5's generic per-artifact loop creates specs/design/tasks.
 export const PROPOSE_UI_DESIGN_LINE =
-  "LV Crew: that same `state.yaml` may also have a non-empty `ui_design`. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), attempt to view or fetch each reference and reflect what you observe in `proposal.md`'s \"What Changes\" and \"Impact\" sections — for a Figma URL, prefer the Figma Dev Mode MCP Server's tools (e.g. `get_code`, `get_screenshot`, `get_variable_defs`) when one is configured in your environment; otherwise use `WebFetch` for a URL, or read a local/downloadable image or PDF directly. If the asset can't be accessed by any available method, fall back to citing the raw reference string.";
+  'LV Crew: that same `state.yaml` may also have a non-empty `ui_design`. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), attempt to view or fetch each reference and reflect what you observe in `proposal.md`\'s "What Changes" and "Impact" sections — for a Figma URL, prefer the Figma Dev Mode MCP Server\'s tools (e.g. `get_code`, `get_screenshot`, `get_variable_defs`) when one is configured in your environment; otherwise use `WebFetch` for a URL, or read a local/downloadable image or PDF directly. If the asset can\'t be accessed by any available method, fall back to citing the raw reference string.';
 
 export function buildBootstrapScanPrompt(
   featureId: string,
@@ -234,6 +245,7 @@ export function buildBootstrapScanPrompt(
   featureName?: string,
   featureDescription?: string,
   uiDesignRefs?: string[],
+  outputLanguage?: string,
 ): string {
   const draftParts: string[] = [];
   if (featureName || featureDescription) {
@@ -263,5 +275,5 @@ export function buildBootstrapScanPrompt(
 
 **Repo root:** ${repoRoot}
 
-${draftSection}Use your tools (listFiles, readFile, searchCode) to find and read the code relevant to '${featureId}' before writing anything.`;
+${draftSection}Use your tools (listFiles, readFile, searchCode) to find and read the code relevant to '${featureId}' before writing anything.${buildOutputLanguageParagraph(outputLanguage)}`;
 }

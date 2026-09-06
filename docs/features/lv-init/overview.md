@@ -2,38 +2,41 @@
 
 # lv init
 
-`lv init` installs and configures OpenSpec in the current repository, then wires OpenSpec-generated workflows to LV-specific context. It is the setup command for OpenSpec integration. It does not generate feature docs and it does not allocate feature IDs.
+`lv init` installs OpenSpec into the current repository and wires the generated OpenSpec workflows to LV-specific context. It is the setup command for OpenSpec integration in LV. It does not generate feature docs and it does not allocate feature IDs.
 
 ## Main components
 
 - `src/index.ts` registers the `init` command and its `--tool` option.
-- `src/cli/init.ts` implements the installation flow, checks whether `openspec` is available, runs `openspec init`, and patches OpenSpec-generated files.
-- `src/prompts.ts` holds the instruction strings that `lv init` writes into OpenSpec config and workflow files.
+- `src/cli/init.ts` implements the install-and-patch flow.
+- `src/prompts.ts` holds the instruction text that `lv init` writes into `openspec/config.yaml` and the generated propose workflow files.
 
 ## High-level flow
 
 1. `lv init` resolves the repository root.
-2. It checks for `openspec` on `PATH` with `which.sync("openspec", { nothrow: true })`.
-3. If OpenSpec is missing, it prompts to install `@fission-ai/openspec` globally with npm. Declining stops the command.
+2. It checks whether `openspec` is available on `PATH` using `which.sync("openspec", { nothrow: true })`.
+3. If OpenSpec is missing, it prompts to install `@fission-ai/openspec` globally with npm. If the user declines, the command prints a manual install hint and stops.
 4. It runs `openspec init <repoRoot>`, passing `--tools <tool>` when `--tool` is provided.
-5. After installation, it updates generated OpenSpec files in place:
-   - `openspec/config.yaml` gets a `context:` block that points OpenSpec at LV feature docs and the current change state.
-   - `openspec/config.yaml` gets `operations.archive.guidance` telling archive workflows to refresh touched feature docs before finishing.
-   - generated `/opsx:propose` workflow files, when present, are patched to autoload change state before asking for a description, to record the created OpenSpec change back to LV, and to surface `ui_design` when creating a proposal.
+5. After OpenSpec installs, it patches the generated files in place:
+   - `openspec/config.yaml` gets a `context:` block that points OpenSpec at LV feature docs, the current change state, a convention for `/opsx:sync`, and the configured output language if any.
+   - `openspec/config.yaml` gets `operations.archive.guidance` that tells archive workflows to refresh touched feature docs before finishing.
+   - generated `/opsx:propose` workflow files, when present, are patched to:
+     - autoload change state before asking for a description
+     - record the created OpenSpec change back to LV
+     - surface `ui_design` when creating a proposal
 6. It prints a success message and suggests starting work with `lv start`.
 
 ## Constraints and assumptions
 
-- The command depends on the `openspec` CLI being available on `PATH`, or installable globally via npm.
-- `--tool` is optional. When omitted, `openspec init` runs without a tools argument.
-- `--tool` is forwarded as a single argument token. The CLI help warns that comma-separated multiple tools must be quoted on PowerShell.
-- `openspec init` failures include captured stderr in the printed error message.
-- The config writes are intended to be idempotent.
-- Fresh-template handling preserves OpenSpec scaffold comments by appending raw YAML when a target section is still commented out.
+- The command depends on `openspec` being available on `PATH`, or installable globally via npm as `@fission-ai/openspec`.
+- `--tool` is optional. When omitted, `openspec init` runs without a `--tools` argument.
+- The CLI help says multiple tools should be passed as a quoted comma-separated value, for example `--tool "claude,codex"`.
+- `openspec init` failures include captured `stderr` in the printed error message.
+- The config updates are intended to be idempotent.
+- Fresh-template handling preserves OpenSpec scaffold comments by appending raw YAML when the target key is still commented out.
 - If `openspec/config.yaml` is missing after install, the command prints an error and skips that patch step.
-- The generated `/opsx:propose` workflow patches are opportunistic: if the expected text shape changes upstream, the command logs an error and leaves that file unmodified.
+- The `/opsx:propose` workflow patches are opportunistic. If the expected upstream text shape changes, the command logs an error and leaves that file unmodified.
 - The workflow patches are reapplied whenever OpenSpec regenerates those files.
 
 ## Current state of the code
 
-The command is implemented and wired into the CLI. It installs OpenSpec, writes LV context into the generated OpenSpec config, and patches generated propose workflows when those files exist.
+The command is implemented and wired into the CLI. It installs OpenSpec when needed, writes LV context into the generated OpenSpec config, and patches generated propose workflows when those files exist. The feature already reflects the current `src/cli/init.ts` behavior, including `ui_design` handling and output-language guidance.

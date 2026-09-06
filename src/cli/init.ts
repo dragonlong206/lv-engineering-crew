@@ -156,8 +156,12 @@ function addArchiveGuidance(repoRoot: string): void {
   if (!hasActiveOperationsKey) {
     // Fresh template — `operations:` only appears commented out. Append a new top-level key
     // instead of round-tripping through js-yaml, so the template's explanatory comments
-    // stay intact.
-    const block = `\noperations:\n  archive:\n    guidance:\n      - ${ARCHIVE_GUIDANCE}\n`;
+    // stay intact. JSON.stringify quotes the value as a valid YAML double-quoted scalar —
+    // required because ARCHIVE_GUIDANCE contains ": ", which is ambiguous unquoted as a
+    // block-sequence item (a parser reads it as an implicit single-key mapping, not a plain
+    // string) and corrupts into a duplicate entry the next time this file is parsed and
+    // re-dumped (e.g. by addContextPointer()'s merge branch below).
+    const block = `\noperations:\n  archive:\n    guidance:\n      - ${JSON.stringify(ARCHIVE_GUIDANCE)}\n`;
     fs.appendFileSync(configPath, block, "utf-8");
     return;
   }

@@ -1,43 +1,32 @@
 schema: spec-driven
-
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
-
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
-
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
-
-context: |
+context: >-
   LV Crew context: before proposing, designing, or implementing anything, read:
-  - the feature docs under `docs/features/<feature-id>/{overview.md,design.md}` for any feature IDs this change touches
-  - the current change's ticket/description context in `docs/changes/<change-id>/state.yaml` (the directory matching the current git branch)
-  - if you are running `/opsx:sync` directly (syncing delta specs to main specs without archiving), also refresh docs for any feature IDs this change touches by running `lv bootstrap <feature-id>` — this is a convention, not enforced by any tooling check
 
+  - the feature docs under `docs/features/<feature-id>/{overview.md,design.md}`
+  for any feature IDs this change touches
+
+  - the current change's ticket/description context in
+  `docs/changes/<change-id>/state.yaml` (the directory matching the current git
+  branch)
+
+  - if you are running `/opsx:sync` directly (syncing delta specs to main specs
+  without archiving), also refresh docs for any feature IDs this change touches
+  by running `lv bootstrap <feature-id>` — this is a convention, not enforced by
+  any tooling check
+
+
+
+  - also check `.lv.yaml` for an `output_language` setting; if set, write all
+  generated artifact prose in that language — code blocks, identifiers, file
+  paths, and command names stay untranslated, headings may stay in English
 operations:
   archive:
     guidance:
-      - "Before completing this archive, refresh the docs of every feature this change touches by running `lv bootstrap <feature-id>`: use the feature IDs recorded in this change's `docs/changes/<change-id>/state.yaml` when present; otherwise, for each of this change's delta spec capability paths, treat its leading path segment as a feature ID and refresh it if a matching `docs/features/<id>/` directory exists."
+      - >-
+        When archiving, sync all delta to OpenSpec specs by default. Before
+        completing this archive, refresh the docs of every feature this change
+        touches by running `lv bootstrap <feature-id>`: use the feature IDs
+        recorded in this change's `docs/changes/<change-id>/state.yaml` when
+        present; otherwise, for each of this change's delta spec capability
+        paths, treat its leading path segment as a feature ID and refresh it if
+        a matching `docs/features/<id>/` directory exists.
