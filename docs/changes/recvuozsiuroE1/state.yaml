@@ -1,0 +1,13 @@
+ticket_id: recvuozsiuroE1
+title: >-
+  Add ability to specify the expected output language (English, Vietnamese,...)
+  so that all LLMs output follows that language only
+description: >-
+  The heading inside the docs could be English but the content must follow the
+  specified language
+feature_ids:
+  - lv-init
+branch: feature/recvuozsiuroE1-add-ability-to-specify-the-expected-output-languag
+created_at: '2026-09-06T07:19:32.770Z'
+lv_version: 0.1.0
+openspec_changes: []
