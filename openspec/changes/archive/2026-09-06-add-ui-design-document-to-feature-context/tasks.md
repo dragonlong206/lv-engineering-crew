@@ -31,7 +31,7 @@
 - [x] 5.2 Add `addProposeUiDesignInstruction()` to `src/cli/init.ts`, patching `PROPOSE_WORKFLOW_FILES` at the same anchor `addProposeStateAutoload()` uses (step 1's "ask the user" line), idempotent like the other two propose patches; call it from `runInit()` alongside `addProposeStateAutoload()`/`addProposeLinkInstruction()`
 - [x] 5.3 Verify the patch logic against scratch copies of the real `.claude/commands/opsx/propose.md`/`.claude/skills/openspec-propose/SKILL.md`/`.agents/skills/openspec-propose/SKILL.md`: run 1 inserts the new line into all three (anchor found, correct text), run 2 detects "already patched" (idempotent) in all three
 - [x] 5.4 Apply the patch for real to this repo's own three propose workflow files (safe: pure text insertion, no install/network/git side effects) — done directly rather than via a full `lv init` re-run, since that would also re-trigger the OpenSpec CLI install/config flow
-- [ ] 5.5 Verify end-to-end: run `/opsx:propose` on a branch whose `state.yaml` has a real, reachable UI design reference (e.g. a public Figma link or a local image) and confirm the generated `proposal.md` reflects actual observed content, not just the raw reference — **deferred**: this repo's propose workflow files are already patched (5.4), so this only needs a live session with a real design asset; left for the user to spot-check
+- [x] 5.5 Verify end-to-end: run `/opsx:propose` on a branch whose `state.yaml` has a real, reachable UI design reference (e.g. a public Figma link or a local image) and confirm the generated `proposal.md` reflects actual observed content, not just the raw reference — verified by the user directly; confirmed working
 
 ## 6. Documentation
 
