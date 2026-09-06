@@ -1,0 +1,17 @@
+ticket_id: recvupv5mrKydb
+title: >-
+  Thêm tham số lv bootstrap biết feature đang bootstrap là 1 feature mới hoàn
+  toàn
+description: >-
+  Khi lv bootstrap 1 feature mới hoàn toàn thì chỉ để placeholder các đầu mục
+  cho user điền, không scan code để lấy nội dung
+
+  `lv init` cũng cần cho user chọn option này khi bootstrap một feature mới
+feature_ids:
+  - lv-bootstrap
+  - lv-init
+branch: feature/recvupv5mrKydb-them-tham-so-lv-bootstrap-biet-feature-ang-bootstr
+created_at: '2026-09-06T05:00:31.452Z'
+lv_version: 0.1.0
+openspec_changes:
+  - lv-bootstrap-new-feature-mode

@@ -26,13 +26,14 @@ program
 
 program
   .command('bootstrap <feature-id>')
-  .description('Generate feature docs from code — from --paths, or by scanning the repo autonomously')
+  .description('Generate feature docs from code — from --paths, by scanning the repo autonomously, or as placeholders for a brand-new feature')
   .option('--paths <paths>', 'Comma-separated paths to read code from (omit to scan the repo autonomously)')
   .option('--name <name>', 'Feature name hint for autonomous scan mode (no --paths)')
   .option('--description <description>', 'Feature description hint for autonomous scan mode (no --paths)')
-  .action(async (featureId: string, opts: { paths?: string; name?: string; description?: string }) => {
+  .option('--new-feature', 'Skip code scanning and write placeholder-only docs for a feature with no code yet')
+  .action(async (featureId: string, opts: { paths?: string; name?: string; description?: string; newFeature?: boolean }) => {
     const { runBootstrap } = await import('./cli/bootstrap.js');
-    await runBootstrap(featureId, opts.paths, { name: opts.name, description: opts.description }).catch(die);
+    await runBootstrap(featureId, opts.paths, { name: opts.name, description: opts.description }, { newFeature: opts.newFeature }).catch(die);
   });
 
 program

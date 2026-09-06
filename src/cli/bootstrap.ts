@@ -13,6 +13,8 @@ import {
   buildBootstrapOverviewPrompt,
   buildBootstrapDesignPrompt,
   buildBootstrapScanPrompt,
+  buildBootstrapPlaceholderOverview,
+  buildBootstrapPlaceholderDesign,
 } from "../prompts.js";
 import { listCodeFiles } from "../tools/codebase.js";
 import { createBootstrapScanAgent } from "../agents/bootstrap-agent.js";
@@ -67,15 +69,25 @@ async function syncNewFeatureToLark(
   await syncFeatureToLarkTable(config, larkToken, featureId, title);
 }
 
+export interface BootstrapOpts {
+  newFeature?: boolean;
+}
+
 export async function runBootstrap(
   featureId: string,
   pathsArg?: string,
   hint?: BootstrapScanHint,
+  opts?: BootstrapOpts,
 ): Promise<void> {
   const config = loadConfig();
   const repoRoot = getRepoRoot();
 
-  if (pathsArg) {
+  if (opts?.newFeature) {
+    if (pathsArg || hint?.name || hint?.description) {
+      printWarn("--paths/--name/--description are ignored when --new-feature is set.");
+    }
+    await runBootstrapPlaceholder(config, repoRoot, featureId);
+  } else if (pathsArg) {
     if (hint?.name || hint?.description) {
       printWarn("--name/--description are ignored when --paths is provided.");
     }
@@ -208,6 +220,47 @@ export async function generateFeatureDocsFromScan(
   updateIndex(repoRoot, featureId);
 
   return { featureDir, overviewPath, designPath };
+}
+
+/**
+ * New-feature placeholder mode: writes heading-only `overview.md`/`design.md` for a feature
+ * with no code yet — no `--paths` read, no LLM call, no codebase exploration. Shared by
+ * `runBootstrap()`'s `--new-feature` flag and `lv start`'s inline feature bootstrap for a
+ * referenced feature with no existing `docs/features/<id>/` directory.
+ */
+export function generateFeatureDocsPlaceholder(
+  repoRoot: string,
+  featureId: string,
+): GeneratedFeatureDocs {
+  const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
+  const overviewPath = path.join(featureDir, "overview.md");
+  const designPath = path.join(featureDir, "design.md");
+
+  fs.mkdirSync(featureDir, { recursive: true });
+  writeFile(overviewPath, AUTO_GENERATED_HEADER + buildBootstrapPlaceholderOverview(featureId));
+  writeFile(designPath, AUTO_GENERATED_HEADER + buildBootstrapPlaceholderDesign(featureId));
+
+  updateIndex(repoRoot, featureId);
+
+  return { featureDir, overviewPath, designPath };
+}
+
+async function runBootstrapPlaceholder(
+  config: Config,
+  repoRoot: string,
+  featureId: string,
+): Promise<void> {
+  printInfo(`Writing placeholder docs for new feature '${featureId}'...`);
+
+  const { overviewPath, designPath } = generateFeatureDocsPlaceholder(repoRoot, featureId);
+
+  await syncNewFeatureToLark(config, featureId, featureId);
+
+  printSuccess(`Wrote placeholder docs for '${featureId}'.`);
+  console.log(`\nFiles written (not committed):`);
+  console.log(`  ${overviewPath}`);
+  console.log(`  ${designPath}`);
+  console.log(`\nReview, edit, then commit manually.`);
 }
 
 async function runBootstrapFromScan(

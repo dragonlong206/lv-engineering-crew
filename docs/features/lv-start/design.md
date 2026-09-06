@@ -14,10 +14,11 @@ The code is organized into these layers:
 - Ticket retrieval, ticket update, and feature-record sync in `src/tools/lark.ts`
 - Branch naming, branch rendering, and branch matching in `src/engine/branch-naming.ts`
 - Feature ID allocation and existing feature discovery in `src/engine/feature-id.ts`
-- Inline feature doc generation in `src/cli/bootstrap.ts`
+- Placeholder feature doc generation in `src/cli/bootstrap.ts`
 - State persistence in `src/engine/state-io.ts`
 - Git operations in `src/integrations/git/client.ts`
 - Shared interactive prompting and JSON parsing helpers in `src/cli/helpers.ts`
+- Prompt construction and LLM-assisted feature matching/splitting in `src/prompts.ts` and `src/cli/start.ts`
 
 The workflow has three major control paths:
 
@@ -25,7 +26,7 @@ The workflow has three major control paths:
 - Description-based start, which avoids Lark entirely and uses free text to build the change context.
 - Resume-aware start, which detects existing branches for the same change ID and lets the engineer resume or restart before any external side effects happen.
 
-Within the ticket-based path, there is a decision point when the ticket has no Feature ID. The command first tries to match the change against existing features, then falls back to inferring one or more new feature titles and allocating matching feature IDs. If any referenced feature directory is missing locally, feature docs are generated inline and the command asks for confirmation before it proceeds. Those generated docs are then treated the same as other feature docs for subsequent Lark sync.
+Within the ticket-based path, there is a decision point when the ticket has no Feature ID. The command first tries to match the change against existing features, then falls back to inferring one or more new feature titles and allocating matching feature IDs. If any referenced feature directory is missing locally, placeholder feature docs are generated inline and the command asks for confirmation before it proceeds. Those generated docs are then treated the same as other feature docs for subsequent Lark sync.
 
 ## Data model / schema
 
@@ -103,9 +104,11 @@ Key supporting functions and interfaces are:
 - `checkoutBranch(repoRoot, branchName)` in `src/integrations/git/client.ts`
 - `discardLocalBranch(repoRoot, branchName, fromBranch)` in `src/integrations/git/client.ts`
 - `commitAll(repoRoot, message)` in `src/integrations/git/client.ts`
+- `push(repoRoot)` in `src/integrations/git/client.ts`
 - `writeState(repoRoot, changeId, state)` in `src/engine/state-io.ts`
 - `confirmSelection()` and `confirmFeatureSplit()` in `src/cli/helpers.ts`
-- `generateFeatureDocsFromScan(config, repoRoot, featureId, hint)` in `src/cli/bootstrap.ts`
+- `generateFeatureDocsPlaceholder(repoRoot, featureId)` in `src/cli/bootstrap.ts`
+- `buildFeatureMatchPrompt()` and `buildFeatureSplitPrompt()` in `src/prompts.ts`
 
 `src/index.ts` exposes the command as `lv start [ticket-id]` with options `--type <type>` and `--description <description>`.
 
@@ -115,7 +118,7 @@ Key supporting functions and interfaces are:
 - Resolve the branch name after loading the ticket, because the ticket title is part of the rendered branch summary.
 - Treat a missing ticket Feature ID as recoverable instead of failing the command, and try to reuse existing feature docs before allocating new IDs.
 - Allow multiple feature IDs when the change appears to span multiple new features, rather than forcing every start to map to exactly one feature.
-- Generate inline feature docs for missing feature directories so ticket-driven starts can bootstrap documentation in the same run.
+- Generate placeholder feature docs for missing feature directories so ticket-driven starts can bootstrap documentation in the same run.
 - Pause for confirmation after generating docs, because those files are intended to be reviewed before commit.
 - Sync features to the Lark Features table independently of ticket write-back, so existing docs can still be backfilled into Lark.
 - Detect whether the ticket Feature ID column is a Link field from Lark metadata, because link fields require resolved record IDs rather than plain text values.
@@ -125,3 +128,4 @@ Key supporting functions and interfaces are:
 - Use a single YAML state file as the source of truth for the change context.
 - Stage all changes before commit, which means `lv start` can include unrelated dirty files if they are present in the working tree.
 - Keep Lark writes non-fatal so the local LV context can still be created even when ticket sync or feature-table sync fails.
+- Use LLM-assisted matching and splitting only when existing feature docs are available or when a ticket lacks an explicit Feature ID, so `lv start` can remain automated without forcing a manual mapping step.

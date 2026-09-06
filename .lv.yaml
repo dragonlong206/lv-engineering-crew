@@ -2,7 +2,7 @@ lark:
   base_id: "xxx"
   table_id: "xxx"
   feature_id_field: "Feature ID" # column name for feature IDs in Lark Base
-  title_field: "Title" # column name used as the ticket title (branch {summary}, analysis prompt)
+  title_field: "Task name" # column name used as the ticket title (branch {summary}, analysis prompt)
 
   # Column holding the ticket's link to the Projects table. Read when a feature is
   # created via `lv start`, so its value can be carried onto the new Feature record.
