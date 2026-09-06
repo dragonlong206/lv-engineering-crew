@@ -2,9 +2,9 @@
 
 # lv start
 
-`lv start` creates the initial change context for an LV workflow run. It writes `docs/changes/<change-id>/state.yaml`, creates or reuses a Git branch for that change, commits the resulting context, and prints the state file path with a reminder to continue through the OpenSpec workflow. The command supports two entry modes: a ticket-backed start from a Lark Base record ID, or a description-backed start from free text via `--description`.
+`lv start` creates the initial change context for an LV workflow run. It writes `docs/changes/<change-id>/state.yaml`, creates or reuses a Git branch for that change, commits the resulting context, and prints the state file path with an OpenSpec next-step reminder. The command supports two entry modes: a ticket-backed start from a Lark Base record ID, or a description-backed start from free text via `--description`.
 
-Ticket-backed starts fetch the ticket from Lark Base, use the ticket title in the branch name, preserve the ticket metadata in state, and can optionally sync newly allocated feature IDs back to the ticket. They also can update the ticket status to the configured in-dev value. Description-backed starts skip Lark, derive a short title from the first line of the description, and use that as the basis for the change ID, branch name, and persisted state.
+Ticket-backed starts fetch the ticket from Lark Base, use the ticket title in the branch name, preserve the ticket metadata in state, and can optionally sync newly allocated feature IDs back to the ticket. They can also update the ticket status to the configured in-dev value. Description-backed starts skip Lark, derive a short title from the first line of the description, and use that as the basis of the change ID, branch name, and persisted state.
 
 ## Main components
 
@@ -13,19 +13,19 @@ Ticket-backed starts fetch the ticket from Lark Base, use the ticket title in th
 - `src/tools/lark.ts` fetches tickets from Lark Base, updates ticket Feature ID values, updates ticket status, and syncs feature records to a Lark Features table when configured.
 - `src/engine/branch-naming.ts` renders branch names from configured patterns, slugifies summaries, and matches existing branches back to a change ID.
 - `src/engine/feature-id.ts` allocates new feature IDs and enumerates existing feature docs for matching.
-- `src/cli/bootstrap.ts` generates feature docs for missing feature directories during `lv start`.
+- `src/cli/bootstrap.ts` generates feature docs placeholders for missing feature directories during `lv start`.
 - `src/engine/state-io.ts` writes and reads `docs/changes/<change-id>/state.yaml`.
-- `src/integrations/git/client.ts` creates, checks out, deletes, and commits Git branches.
+- `src/integrations/git/client.ts` creates, checks out, deletes, commits, and pushes Git branches.
 - `src/types.ts` defines the persisted state and configuration schemas, including the Lark sync settings.
 
 ## High-level flow
 
 1. Load repository configuration and resolve the repo root.
-2. If a branch already exists for the target change ID, prompt to resume or restart before doing any Lark or LLM work.
+2. Check whether a branch already exists for the target change ID. If it does, prompt to resume or restart before any Lark or LLM work.
 3. For ticket-based starts, require Lark app credentials, fetch the ticket, and build the branch name from the ticket title.
 4. For description-based starts, derive a title from the first line of the description, slugify it into a change ID, and render the branch name from that value.
 5. Determine the feature IDs to associate with the change. If a ticket already has feature IDs, use them. If it has none, try to match existing features, otherwise infer one or more new feature titles and allocate new IDs.
-6. For any referenced feature whose `docs/features/<id>/` directory is missing, generate feature docs inline and prompt for confirmation before continuing.
+6. For any referenced feature whose `docs/features/<id>/` directory is missing, generate placeholder feature docs and prompt for confirmation before continuing.
 7. Sync referenced features to the Lark Features table when enabled, then write any newly allocated feature IDs back to the ticket when ticket sync is enabled. These writes are best effort.
 8. Update the ticket status when status sync is enabled and the current value differs from the configured in-dev value.
 9. Create the branch if needed, write `docs/changes/<change-id>/state.yaml`, stage the repository, and commit the change context.
@@ -48,4 +48,4 @@ Ticket-backed starts fetch the ticket from Lark Base, use the ticket title in th
 
 ## Current state of the code
 
-`lv start` is implemented in `src/cli/start.ts` and registered in `src/index.ts`. The current implementation supports both ticket-backed and free-text starts, existing-branch resume or restart, inline feature doc generation for missing feature directories, best-effort sync of new feature IDs back to Lark, ticket status updates when configured, and syncing referenced features into the Lark Features table when configured. The persisted state schema currently includes `ticket_id` only for ticket-based starts, plus `title`, `description`, `feature_ids`, `branch`, `created_at`, `lv_version`, and `openspec_changes`.
+`lv start` is implemented in `src/cli/start.ts` and registered in `src/index.ts`. The current implementation supports both ticket-backed and free-text starts, existing-branch resume or restart, feature matching against existing docs, placeholder feature doc generation for missing feature directories, best-effort sync of new feature IDs back to Lark, ticket status updates when configured, and syncing referenced features into the Lark Features table when configured. The persisted state schema currently includes `ticket_id` only for ticket-based starts, plus `title`, `description`, `feature_ids`, `branch`, `created_at`, `lv_version`, and `openspec_changes`.

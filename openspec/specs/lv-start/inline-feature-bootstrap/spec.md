@@ -5,11 +5,11 @@ Lets `lv start` create a brand-new feature's docs on the fly when a ticket refer
 ## Requirements
 
 ### Requirement: Missing feature directory triggers inline bootstrap
-The system SHALL, for each feature ID referenced by a ticket, generate that feature's docs automatically when no `docs/features/<id>/` directory exists, instead of exiting with an error.
+The system SHALL, for each feature ID referenced by a ticket, generate that feature's docs automatically in new-feature placeholder mode when no `docs/features/<id>/` directory exists, instead of exiting with an error or running autonomous codebase exploration.
 
 #### Scenario: Ticket references a feature with no existing docs directory
 - **WHEN** `lv start` is run for a ticket whose Feature ID field lists an ID with no `docs/features/<id>/` directory on disk
-- **THEN** the system generates that feature's docs using the ticket's title and description as context, without exiting with an error
+- **THEN** the system generates that feature's docs in new-feature placeholder mode, without scanning the repository and without exiting with an error
 
 ### Requirement: Empty or missing feature reference is matched against existing features first
 The system SHALL, before treating an empty Feature ID (ticket mode) or an unset feature reference (description mode) as a brand-new feature, compare the change's title/description against every existing feature that has non-empty docs and present every existing feature that is clearly a match, if any, for the engineer to confirm — the change may match more than one existing feature, not just the single best guess.

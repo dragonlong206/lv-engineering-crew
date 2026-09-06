@@ -52,6 +52,56 @@ ${codeBlock}`;
 }
 
 // ---------------------------------------------------------------------------
+// Bootstrap — new-feature placeholder mode (no scan, no LLM call)
+// ---------------------------------------------------------------------------
+
+export function buildBootstrapPlaceholderOverview(featureId: string): string {
+  return `# ${featureId}
+
+## Purpose of the Feature
+
+<!-- TODO: describe what this feature does and why it exists -->
+
+## Main Components
+
+<!-- TODO: list the main components -->
+
+## High-level Flow
+
+<!-- TODO: describe the high-level flow -->
+
+## Constraints and Assumptions
+
+<!-- TODO: list constraints and assumptions -->
+
+## Current State of the Code
+
+<!-- TODO: describe the current state of the code -->
+`;
+}
+
+export function buildBootstrapPlaceholderDesign(featureId: string): string {
+  return `# ${featureId}
+
+## Architecture and Layers
+
+<!-- TODO: describe architecture and layers -->
+
+## Data Model / Schema
+
+<!-- TODO: describe data model / schema -->
+
+## APIs / Interfaces
+
+<!-- TODO: describe APIs / interfaces -->
+
+## Key Design Decisions
+
+<!-- TODO: list key design decisions -->
+`;
+}
+
+// ---------------------------------------------------------------------------
 // Bootstrap — autonomous codebase scan mode (no --paths)
 // ---------------------------------------------------------------------------
 

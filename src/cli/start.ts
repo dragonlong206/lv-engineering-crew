@@ -27,7 +27,7 @@ import {
   listExistingFeatures,
   type ExistingFeature,
 } from "../engine/feature-id.js";
-import { generateFeatureDocsFromScan } from "./bootstrap.js";
+import { generateFeatureDocsPlaceholder } from "./bootstrap.js";
 import {
   printInfo,
   printSuccess,
@@ -325,14 +325,9 @@ async function startFromTicket(
     const generated = [];
     for (const featureId of missingFeatureIds) {
       printInfo(
-        `Scanning codebase to generate docs for new feature '${featureId}'...`,
+        `Writing placeholder docs for new feature '${featureId}'...`,
       );
-      generated.push(
-        await generateFeatureDocsFromScan(config, repoRoot, featureId, {
-          name: newFeatureTitles.get(featureId) ?? ticket.title,
-          description: ticket.description,
-        }),
-      );
+      generated.push(generateFeatureDocsPlaceholder(repoRoot, featureId));
     }
 
     console.log(`\nGenerated feature docs (not yet committed):`);
