@@ -33,6 +33,12 @@ lark:
   # created via `lv start`; left unset for `lv bootstrap` runs with no ticket.
   # features_table_project_field: "Project"
 
+  # Column holding a ticket's UI design reference (a Figma link, an HTML
+  # prototype, or an attached image/PDF). Unset skips UI design capture
+  # entirely. May be a plain text/URL field, a Lark attachment field, or a
+  # Lark URL-type field — lv normalizes whichever shape it reads.
+  # ui_design_field: "UI Design"
+
   # Column holding the ticket's status (a single-select field), and the value
   # `lv start` writes there once work begins. Default column name "Status",
   # default value "In Dev".

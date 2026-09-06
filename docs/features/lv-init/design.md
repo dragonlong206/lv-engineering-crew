@@ -4,7 +4,7 @@
 
 ## Architecture and layers
 
-`lv init` is a thin orchestration layer over three responsibilities:
+`lv init` is a small orchestration layer around three responsibilities:
 
 1. delegate installation to the external `openspec` CLI
 2. post-process `openspec/config.yaml` to inject LV-specific guidance
@@ -12,10 +12,10 @@
 
 The CLI entry point lives in `src/index.ts`, which dispatches to `runInit()` in `src/cli/init.ts`. Reusable instruction text is centralized in `src/prompts.ts`, keeping the command implementation focused on file I/O and orchestration.
 
-The init implementation has two distinct update modes for config files:
+The init implementation uses two update modes for `openspec/config.yaml`:
 
-- raw append for fresh templates, so OpenSpec’s scaffold comments survive
-- YAML parse and re-dump for already-active keys, so existing user customizations can be merged structurally
+- raw append for fresh templates, so OpenSpec scaffold comments survive
+- YAML parse and rewrite for already-active keys, so existing user customizations can be merged structurally
 
 ## Data model / schema
 
@@ -35,10 +35,11 @@ The command also patches generated `/opsx:propose` workflow files in these locat
 - `.claude/skills/openspec-propose/SKILL.md`
 - `.agents/skills/openspec-propose/SKILL.md`
 
-Those workflow patches insert two LV-specific lines around the existing OpenSpec steps:
+Those workflow patches insert LV-specific instructions around the existing OpenSpec steps:
 
 - a line that autoloads `docs/changes/<change-id>/state.yaml` when the current git branch matches
 - a line that records the newly created OpenSpec change with `lv link "<name>"`
+- a line that checks `state.yaml` for a `ui_design` reference and, when creating the `proposal` artifact, attempts to inspect it and reflect that in proposal text
 
 ## APIs / interfaces
 
@@ -56,16 +57,18 @@ Those workflow patches insert two LV-specific lines around the existing OpenSpec
 - `addContextPointer(repoRoot: string)` in `src/cli/init.ts`
 - `addArchiveGuidance(repoRoot: string)` in `src/cli/init.ts`
 - `addProposeStateAutoload(repoRoot: string)` in `src/cli/init.ts`
+- `addProposeUiDesignInstruction(repoRoot: string)` in `src/cli/init.ts`
 - `addProposeLinkInstruction(repoRoot: string)` in `src/cli/init.ts`
-- `CONTEXT_POINTER_LINES`, `ARCHIVE_GUIDANCE`, `PROPOSE_STATE_AUTOLOAD_LINE`, and `PROPOSE_LINK_CHANGE_LINE` in `src/prompts.ts`
+- `CONTEXT_POINTER_LINES`, `ARCHIVE_GUIDANCE`, `PROPOSE_STATE_AUTOLOAD_LINE`, `PROPOSE_LINK_CHANGE_LINE`, and `PROPOSE_UI_DESIGN_LINE` in `src/prompts.ts`
 
 ## Key design decisions
 
 - OpenSpec is treated as the external integration layer, so LV delegates tool support to `openspec init` instead of maintaining its own agent matrix.
-- Installation detection is path-based and synchronous. This avoids relying on platform-specific spawn error shapes, especially on Windows.
+- Installation detection is path-based and synchronous. This avoids relying on platform-specific spawn error shapes.
 - The command captures `openspec init` stderr while still streaming output live to the terminal, so failures can include useful diagnostics.
 - `openspec/config.yaml` is updated with whitespace-normalized idempotency checks, so rerunning `lv init` does not duplicate guidance even if formatting changes.
 - Fresh templates are patched by appending YAML, preserving generated comments. When a section is already active, the code falls back to YAML parsing and rewriting so missing nested keys can be merged structurally.
-- The archive guidance is advisory only. It is read from OpenSpec’s generated archive guidance hook, but it does not block completion if ignored.
+- The archive guidance is advisory only. It is read by OpenSpec’s generated archive workflow and does not block completion if ignored.
 - The `/opsx:propose` workflow patches are best-effort and shape-dependent. They are not driven by `openspec/config.yaml`; they are inserted directly into generated workflow files because those steps need to run before OpenSpec’s context instructions are surfaced.
+- The UI design instruction is scoped to `/opsx:propose` only, because it is only useful when writing the proposal artifact.
 - `lv init` is not a full OpenSpec file generator. It leaves OpenSpec’s own generated workflows in place and only adds LV-specific context and workflow adjustments.

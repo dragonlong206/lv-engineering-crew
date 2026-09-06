@@ -214,6 +214,18 @@ export const PROPOSE_STATE_AUTOLOAD_LINE =
 export const PROPOSE_LINK_CHANGE_LINE =
   'LV Crew: after `openspec new change` succeeds, check for a `docs/changes/<change-id>/state.yaml` whose `branch` field matches the current git branch. If one exists, run `lv link "<name>"` (the name just used for `openspec new change`) to record this OpenSpec change against it. Skip this step if no matching `state.yaml` exists.';
 
+// Patched into the generated `/opsx:propose` workflow file(s) by `addProposeUiDesignInstruction()`
+// in init.ts, at the same insertion point as `PROPOSE_STATE_AUTOLOAD_LINE` (step 1's "ask the
+// user" anchor). Deliberately scoped to `/opsx:propose` only — not the generic `context:`
+// pointer — because analyzing a UI design is only useful for the one artifact that reflects it
+// (proposal.md's What Changes/Impact); every other OpenSpec workflow (apply/sync/archive) would
+// otherwise carry this instruction on every invocation for no benefit, since by the time they
+// run, whatever was learned from the design should already be captured in proposal.md/design.md
+// text. Explicitly names the `proposal` artifact so the instruction doesn't also apply when step
+// 5's generic per-artifact loop creates specs/design/tasks.
+export const PROPOSE_UI_DESIGN_LINE =
+  "LV Crew: that same `state.yaml` may also have a non-empty `ui_design`. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), attempt to view or fetch each reference and reflect what you observe in `proposal.md`'s \"What Changes\" and \"Impact\" sections — for a Figma URL, prefer the Figma Dev Mode MCP Server's tools (e.g. `get_code`, `get_screenshot`, `get_variable_defs`) when one is configured in your environment; otherwise use `WebFetch` for a URL, or read a local/downloadable image or PDF directly. If the asset can't be accessed by any available method, fall back to citing the raw reference string.";
+
 export function buildBootstrapScanPrompt(
   featureId: string,
   repoRoot: string,
@@ -221,11 +233,17 @@ export function buildBootstrapScanPrompt(
   existingDesignMd?: string,
   featureName?: string,
   featureDescription?: string,
+  uiDesignRefs?: string[],
 ): string {
   const draftParts: string[] = [];
   if (featureName || featureDescription) {
     draftParts.push(
       `## Feature hint\n${featureName ? `Name: ${featureName}\n` : ""}${featureDescription ? `Description: ${featureDescription}\n` : ""}`,
+    );
+  }
+  if (uiDesignRefs && uiDesignRefs.length > 0) {
+    draftParts.push(
+      `## UI design references\n${uiDesignRefs.map((ref) => `- ${ref}`).join("\n")}\n`,
     );
   }
   if (existingOverviewMd) {

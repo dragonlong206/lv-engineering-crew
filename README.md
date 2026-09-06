@@ -62,6 +62,7 @@ lark:
   table_id: "YOUR_TABLE_ID"
   feature_id_field: "Feature ID" # column name for feature IDs in Lark Base
   title_field: "Title" # column name used as the ticket title (branch {summary}, analysis prompt)
+  # ui_design_field: "UI Design" # column holding a ticket's UI design reference — omit to skip capture
 
 default_branch: main
 
@@ -89,6 +90,8 @@ feature_id_digits: 4
 scan_extensions: [cs, vb, cshtml, razor, csproj, sln, json, xml, config]
 scan_skip_dirs: [bin, obj, .vs, packages, node_modules, .git]
 ```
+
+**UI Design field** (`lark.ui_design_field`): if a ticket carries a UI design reference — a Figma link, an HTML prototype, or an attached image/PDF — point this at that Lark Base column and `lv start` captures it automatically. It works regardless of the column's type (plain text/URL field, a Lark attachment field with one or more files, or a Lark URL-type field) — `lv` normalizes whatever shape it reads into a flat list of references. Captured references land in `docs/changes/<change-id>/state.yaml` (`ui_design`) and, when a referenced feature is bootstrapped inline, in that feature's generated docs too. `lv` only captures the reference — it never fetches or analyzes the design itself. `lv init` also patches your coding agent's `/opsx:propose` workflow so that when it writes the proposal, it attempts to view the referenced design and reflect what it finds — preferring the [Figma Dev Mode MCP Server](https://developers.figma.com/docs/figma-mcp-server/) for a Figma link when you have one configured, otherwise fetching the URL or reading a local file directly, and falling back to just citing the reference if it can't be reached. Omit `ui_design_field` to skip this entirely.
 
 ### 2. Credentials
 
@@ -150,7 +153,8 @@ lv init                 # no --tool — OpenSpec's own interactive prompt runs
 
 - Delegates entirely to the OpenSpec CLI (`openspec init --tools <tool>`) — `lv` does not hardcode a list of supported coding agents; whatever `openspec init --help` supports, `--tool` accepts. Refer to [OpenSpec's supported tools](https://github.com/Fission-AI/OpenSpec/blob/main/docs/supported-tools.md)
 - Idempotently appends a pointer to OpenSpec's project-wide `context:` (`openspec/config.yaml`) naming `docs/features/<feature-id>/{overview.md,design.md}` and the current change's `docs/changes/<change-id>/state.yaml`, so OpenSpec's explore/propose/apply workflows load them automatically instead of you pasting them into every prompt
-- Run once per repo (re-running is safe — both the OpenSpec install and the context pointer are idempotent)
+- Idempotently patches the generated `/opsx:propose` workflow so, when a change's `state.yaml` has a UI design reference, it analyzes it while writing the proposal (see the UI Design field above) — scoped to `/opsx:propose` only, not every workflow
+- Run once per repo (re-running is safe — the OpenSpec install and both patches above are idempotent)
 
 ### `lv bootstrap <feature-id> [--paths <paths>] [--name <name>] [--description <description>]`
 
@@ -187,7 +191,7 @@ By ticket ID:
 
 - Fetches the record from Lark Base; feature IDs with no `docs/features/<id>/` yet are bootstrapped inline (see `lv bootstrap`'s autonomous-scan mode) with a human review gate before continuing
 - Creates the branch (named per `--type`'s pattern in `.lv.yaml`'s `branch_types`, or `default_branch_type` if omitted, with `{summary}` filled in from the ticket title) from the default branch
-- Writes `docs/changes/<ticket-id>/state.yaml` with the ticket's title, description, and feature IDs — this is LV's only artifact for the change; no analysis document is generated
+- Writes `docs/changes/<ticket-id>/state.yaml` with the ticket's title, description, feature IDs, and (when `lark.ui_design_field` is configured and set) its UI design reference — this is LV's only artifact for the change; no analysis document is generated
 - Commits and pushes the branch
 
 By description:

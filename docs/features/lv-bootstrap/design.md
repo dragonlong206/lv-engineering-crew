@@ -6,7 +6,7 @@
 `lv-bootstrap` is organized as a CLI entrypoint, a bootstrap runner, two generation paths, shared prompt and template helpers, reusable codebase tools, and an optional Lark sync step.
 
 - **CLI layer**: `src/index.ts` registers `bootstrap <feature-id>` and forwards `--paths`, `--name`, `--description`, and `--new-feature` to `runBootstrap()`.
-- **Application layer**: `src/cli/bootstrap.ts` loads config, chooses the execution mode, constructs prompts, writes output files, updates the feature index, and can sync a new feature to Lark.
+- **Application layer**: `src/cli/bootstrap.ts` loads config, chooses the execution mode, constructs prompts, writes output files, updates the feature index, and can sync a generated feature to Lark.
 - **Path-based generation layer**: an inline Mastra `Agent` named `lv-bootstrap-agent` generates the docs from a prebuilt code context string.
 - **Scan layer**: `createBootstrapScanAgent()` in `src/agents/bootstrap-agent.ts` creates a Mastra `Agent` named `lv-bootstrap-scan-agent` with repository tools attached.
 - **Placeholder layer**: `generateFeatureDocsPlaceholder()` writes heading-only docs for features that do not yet have code.
@@ -32,6 +32,7 @@ The scan prompt is built from:
 - the feature ID
 - the repository root path
 - optional feature name and description hints
+- optional UI design references
 - any existing `overview.md`
 - any existing `design.md`
 
@@ -79,11 +80,11 @@ A feature is synced only when the configuration enables it and the required Lark
   - Appends a link for the feature only if the file does not already contain that feature link or marker.
 
 ## Key Design Decisions
-1. **Two generation strategies plus a placeholder mode**: The command supports deterministic path-based input, autonomous repo scanning, and placeholder docs for a brand-new feature with no implementation yet.
+1. **Three generation strategies**: The command supports deterministic path-based input, autonomous repo scanning, and placeholder docs for a brand-new feature with no implementation yet.
 2. **Separate agents for separate jobs**: Path-based generation uses a simple inline agent, while scan mode uses a tool-equipped agent so it can inspect the repository interactively.
-3. **Explicit reuse of draft docs**: Scan mode includes any existing overview or design drafts in the prompt so the model can verify and refine them.
+3. **Draft docs are reused in scan mode**: Existing overview or design drafts are included in the prompt so the model can verify and refine them.
 4. **Shared output convention**: All modes write to the same feature directory layout and prepend the same auto-generated header.
 5. **Index file maintenance**: `INDEX.md` is updated automatically to keep feature documentation discoverable.
 6. **Config-driven model selection**: Both generation paths use `getModelForStep(config, "bootstrap")`, allowing the bootstrap model to be overridden in configuration.
-7. **Tool limits are encapsulated in the tooling layer**: code discovery is restricted by configured extension and skip-directory lists, and search results are capped to keep exploration bounded.
+7. **Tooling limits are encapsulated**: code discovery is restricted by configured extension and skip-directory lists, and search results are capped to keep exploration bounded.
 8. **Optional downstream sync is isolated**: Lark table synchronization is only attempted after a feature is generated, and only when the relevant feature-table and credential settings are present.

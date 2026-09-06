@@ -15,6 +15,10 @@ export const StateSchema = z.object({
   // change ID by convention, and one LV change can spawn more than one OpenSpec change.
   // Populated by `lv link`, called by `/opsx:propose` after `openspec new change`.
   openspec_changes: z.array(z.string()).default([]),
+  // The ticket's UI design reference(s) (Figma link, HTML prototype, image, or PDF), read
+  // from `lark.ui_design_field` when configured. Omitted (not `[]`) when there's nothing to
+  // record — see `normalizeUiDesignRefs()` in src/tools/lark.ts.
+  ui_design: z.array(z.string()).optional(),
 });
 export type State = z.infer<typeof StateSchema>;
 
@@ -43,6 +47,11 @@ export const LarkConfigSchema = z.object({
   // from the originating ticket's `project_field` link when a feature is created via
   // `lv start` for a ticket.
   features_table_project_field: z.string().default("Project"),
+  // Column holding a ticket's UI design reference (a Figma link, an HTML prototype, or an
+  // attached image/PDF). Unset skips UI design capture entirely. May be a plain text/URL
+  // field, a Lark attachment field, or a Lark URL-type field — normalized to a flat list of
+  // reference strings regardless of shape.
+  ui_design_field: z.string().optional(),
   // Column holding the ticket's status (a single-select field), read and written as a
   // plain string.
   status_field: z.string().default("Status"),

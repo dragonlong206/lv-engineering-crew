@@ -21,7 +21,11 @@ import {
   push,
 } from "../integrations/git/client.js";
 import { writeState, readState, stateExists } from "../engine/state-io.js";
-import { renderBranchName, slugify, findChangeBranches } from "../engine/branch-naming.js";
+import {
+  renderBranchName,
+  slugify,
+  findChangeBranches,
+} from "../engine/branch-naming.js";
 import {
   allocateFeatureIds,
   listExistingFeatures,
@@ -42,7 +46,10 @@ import {
   extractJson,
 } from "./helpers.js";
 import { printStateSummary } from "./status.js";
-import { buildFeatureMatchPrompt, buildFeatureSplitPrompt } from "../prompts.js";
+import {
+  buildFeatureMatchPrompt,
+  buildFeatureSplitPrompt,
+} from "../prompts.js";
 import { LV_VERSION, type Config, type State } from "../types.js";
 
 const featureMatchAgent = new Agent({
@@ -168,7 +175,9 @@ async function resolveExistingBranch(
   repoRoot: string,
   config: Config,
   changeId: string,
-): Promise<{ action: "resumed" } | { action: "continue"; existingBranchName?: string }> {
+): Promise<
+  { action: "resumed" } | { action: "continue"; existingBranchName?: string }
+> {
   const candidates = await findChangeBranches(repoRoot, config, changeId);
   if (candidates.length === 0) return { action: "continue" };
 
@@ -254,6 +263,7 @@ async function startFromTicket(
     config.lark.title_field,
     config.lark.project_field,
     larkToken,
+    config.lark.ui_design_field,
   );
 
   // Branch name embeds the ticket title as a summary slug, so it's rendered once we have the
@@ -309,7 +319,9 @@ async function startFromTicket(
         `No match, allocated new feature${allocated.length > 1 ? "s" : ""} ${allocated.join(", ")}.`,
       );
       featureIds = allocated;
-      allocated.forEach((id, i) => newFeatureTitles.set(id, confirmedTitles[i]));
+      allocated.forEach((id, i) =>
+        newFeatureTitles.set(id, confirmedTitles[i]),
+      );
     }
   }
 
@@ -324,9 +336,7 @@ async function startFromTicket(
   if (missingFeatureIds.length > 0) {
     const generated = [];
     for (const featureId of missingFeatureIds) {
-      printInfo(
-        `Writing placeholder docs for new feature '${featureId}'...`,
-      );
+      printInfo(`Writing placeholder docs for new feature '${featureId}'...`);
       generated.push(generateFeatureDocsPlaceholder(repoRoot, featureId));
     }
 
@@ -437,6 +447,9 @@ async function startFromTicket(
     created_at: now,
     lv_version: LV_VERSION,
     openspec_changes: [],
+    ...(ticket.uiDesignRefs.length > 0
+      ? { ui_design: ticket.uiDesignRefs }
+      : {}),
   };
   writeState(repoRoot, ticketId, state);
 
@@ -481,7 +494,8 @@ async function startFromDescription(
   // `title` again as `summary` would duplicate it in the rendered branch name. Unless we're
   // resuming on an already-checked-out branch, in which case keep its actual name.
   const branchName =
-    existingBranchName ?? renderBranchName(config, changeId, { type: opts.type });
+    existingBranchName ??
+    renderBranchName(config, changeId, { type: opts.type });
 
   if (existingBranchName) {
     printInfo(`Continuing on existing branch ${existingBranchName}...`);

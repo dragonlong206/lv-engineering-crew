@@ -4,7 +4,7 @@
 
 ## Architecture and layers
 
-`lv start` is a command-line orchestration flow that combines input parsing, optional Lark integration, branch naming, feature discovery, feature documentation bootstrapping, state persistence, and Git side effects.
+`lv start` is an orchestration command that combines input parsing, optional Lark integration, branch naming, feature discovery, feature documentation bootstrapping, state persistence, and Git side effects.
 
 The code is organized into these layers:
 
@@ -12,7 +12,7 @@ The code is organized into these layers:
 - Workflow orchestration in `src/cli/start.ts`
 - Configuration and repository path resolution in `src/config.ts`
 - Ticket retrieval, ticket update, and feature-record sync in `src/tools/lark.ts`
-- Branch naming, branch rendering, and branch matching in `src/engine/branch-naming.ts`
+- Branch naming, branch rendering, branch matching, and branch discovery in `src/engine/branch-naming.ts`
 - Feature ID allocation and existing feature discovery in `src/engine/feature-id.ts`
 - Placeholder feature doc generation in `src/cli/bootstrap.ts`
 - State persistence in `src/engine/state-io.ts`
@@ -23,7 +23,7 @@ The code is organized into these layers:
 The workflow has three major control paths:
 
 - Ticket-based start, which fetches Lark data and may write back to Lark.
-- Description-based start, which avoids Lark entirely and uses free text to build the change context.
+- Description-based start, which avoids Lark and uses free text to build the change context.
 - Resume-aware start, which detects existing branches for the same change ID and lets the engineer resume or restart before any external side effects happen.
 
 Within the ticket-based path, there is a decision point when the ticket has no Feature ID. The command first tries to match the change against existing features, then falls back to inferring one or more new feature titles and allocating matching feature IDs. If any referenced feature directory is missing locally, placeholder feature docs are generated inline and the command asks for confirmation before it proceeds. Those generated docs are then treated the same as other feature docs for subsequent Lark sync.
@@ -39,10 +39,11 @@ Within the ticket-based path, there is a decision point when the ticket has no F
 - `description`
 - `featureIds: string[]`
 - `projectRecordIds: string[]`
+- `uiDesignRefs: string[]`
 - `rawFields: Record<string, unknown>`
 - `featureIdFieldIsLink: boolean`
 
-`fetchTicket()` reads the record from the configured Lark Base table, checks whether the configured Feature ID column is a Bitable Link field by inspecting field metadata, and extracts feature IDs accordingly. For link fields it reads linked record text from `text_arr`; for non-link fields it accepts comma-separated strings or string arrays. It also extracts project link record IDs from the configured project field and preserves the raw fields for later updates.
+`fetchTicket()` reads the record from the configured Lark Base table, checks whether the configured Feature ID column is a Bitable Link field by inspecting field metadata, and extracts feature IDs accordingly. For link fields it reads linked record text from `text_arr`; for non-link fields it accepts comma-separated strings or string arrays. It also extracts project link record IDs from the configured project field, normalizes UI design references when configured, and preserves the raw fields for later updates.
 
 ### Persisted state
 
@@ -56,6 +57,7 @@ Within the ticket-based path, there is a decision point when the ticket has no F
 - `created_at`
 - `lv_version`
 - `openspec_changes` with a default of `[]`
+- optional `ui_design`
 
 `writeState()` creates the `docs/changes/<change-id>/` directory if needed and serializes the schema as YAML. `readState()` is used during resume handling to determine whether the branch already has persisted context.
 
@@ -68,6 +70,7 @@ The relevant configuration shape includes:
 - `lark.feature_id_field`
 - `lark.title_field`
 - `lark.project_field`
+- `lark.ui_design_field`
 - `lark.sync_feature_id`
 - `lark.features_table_id`
 - `lark.sync_new_features`
@@ -92,7 +95,7 @@ The public entry point is `runStart(ticketId: string | undefined, opts: StartOpt
 Key supporting functions and interfaces are:
 
 - `getTenantAccessToken(appId, appSecret)` in `src/tools/lark.ts`
-- `fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, projectField, token)` in `src/tools/lark.ts`
+- `fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, projectField, token, uiDesignField?)` in `src/tools/lark.ts`
 - `updateTicketFeatureId(ticket, newFeatureIds, baseId, tableId, featureIdField, token, newFeatureRecordIds?)` in `src/tools/lark.ts`
 - `updateTicketStatus(ticket, newStatus, baseId, tableId, statusField, token)` in `src/tools/lark.ts`
 - `syncFeatureToLarkTable(config, larkToken, featureId, title, projectRecordIds?)` in `src/tools/lark.ts`
@@ -104,7 +107,7 @@ Key supporting functions and interfaces are:
 - `checkoutBranch(repoRoot, branchName)` in `src/integrations/git/client.ts`
 - `discardLocalBranch(repoRoot, branchName, fromBranch)` in `src/integrations/git/client.ts`
 - `commitAll(repoRoot, message)` in `src/integrations/git/client.ts`
-- `push(repoRoot)` in `src/integrations/git/client.ts`
+- `push(repoRoot, branchName)` in `src/integrations/git/client.ts`
 - `writeState(repoRoot, changeId, state)` in `src/engine/state-io.ts`
 - `confirmSelection()` and `confirmFeatureSplit()` in `src/cli/helpers.ts`
 - `generateFeatureDocsPlaceholder(repoRoot, featureId)` in `src/cli/bootstrap.ts`
@@ -129,3 +132,4 @@ Key supporting functions and interfaces are:
 - Stage all changes before commit, which means `lv start` can include unrelated dirty files if they are present in the working tree.
 - Keep Lark writes non-fatal so the local LV context can still be created even when ticket sync or feature-table sync fails.
 - Use LLM-assisted matching and splitting only when existing feature docs are available or when a ticket lacks an explicit Feature ID, so `lv start` can remain automated without forcing a manual mapping step.
+- Preserve optional UI design references from Lark into persisted state so downstream OpenSpec steps can reuse them.
