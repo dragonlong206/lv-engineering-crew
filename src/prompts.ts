@@ -237,6 +237,16 @@ export const PROPOSE_LINK_CHANGE_LINE =
 export const PROPOSE_UI_DESIGN_LINE =
   'LV Crew: that same `state.yaml` may also have a non-empty `ui_design`. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), attempt to view or fetch each reference and reflect what you observe in `proposal.md`\'s "What Changes" and "Impact" sections — for a Figma URL, prefer the Figma Dev Mode MCP Server\'s tools (e.g. `get_code`, `get_screenshot`, `get_variable_defs`) when one is configured in your environment; otherwise use `WebFetch` for a URL, or read a local/downloadable image or PDF directly. If the asset can\'t be accessed by any available method, fall back to citing the raw reference string.';
 
+// Patched into the generated `/opsx:propose` workflow file(s) by `addProposeAttachmentInstruction()`
+// in init.ts, at the same insertion point as `PROPOSE_STATE_AUTOLOAD_LINE`/`PROPOSE_UI_DESIGN_LINE`
+// (step 1's "ask the user" anchor). Deliberately scoped to `/opsx:propose` only, same reasoning as
+// `PROPOSE_UI_DESIGN_LINE`. Unlike a `ui_design` reference (a remote URL of unknown shape), an
+// attachment is already a local file on disk by the time this runs — `lv start` downloaded it —
+// so the instruction only needs a plain `Read`, with one fallback for formats `Read` can't handle
+// (e.g. video).
+export const PROPOSE_ATTACHMENT_LINE =
+  'LV Crew: that same `state.yaml` may also have a non-empty `attachments` — repo-relative paths to files `lv start` already downloaded from the ticket. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), read each listed file directly (no fetch needed) and reflect what you observe in `proposal.md`\'s "What Changes" and "Impact" sections. If a file\'s format can\'t be read directly (e.g. a video), cite its name and path instead of guessing at its content.';
+
 export function buildBootstrapScanPrompt(
   featureId: string,
   repoRoot: string,

@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { printInfo, printWarn } from '../cli/helpers.js';
@@ -13,6 +15,11 @@ export interface LarkTicket {
   // `normalizeUiDesignRefs()`. Empty when `ui_design_field` isn't configured or resolves to
   // nothing — never undefined, so callers can check `.length` without an extra guard.
   uiDesignRefs: string[];
+  // Attachment metadata (file_token + original filename) extracted from `attachment_field`,
+  // via `extractAttachments()`. Empty when `attachment_field` isn't configured or resolves to
+  // nothing. Downloading the actual file content is a separate step
+  // (`downloadTicketAttachments()`), not performed here.
+  attachments: { fileToken: string; name: string }[];
   rawFields: Record<string, unknown>;
   // Whether `featureIdField` (the field named by `lark.feature_id_field`) is a Bitable Link
   // field, per `isLinkField()`. Determined once in `fetchTicket()` and carried on the ticket
@@ -98,6 +105,31 @@ function normalizeUiDesignRefs(value: unknown): string[] {
   return [];
 }
 
+/**
+ * Extracts downloadable attachment metadata from a Lark attachment-field's raw read value — an
+ * array of file objects each carrying `file_token`/`name` (plus fields this doesn't need, like
+ * `size`/`type`/`url`/`tmp_url`). Unlike `normalizeUiDesignRefs()`, which only needs a
+ * reference string, attachment *download* requires `file_token` — the id Lark's Drive
+ * media-download endpoint takes — so entries missing it are dropped rather than falling back to
+ * `url`/`tmp_url`/`name`.
+ */
+function extractAttachments(value: unknown): { fileToken: string; name: string }[] {
+  if (!Array.isArray(value)) return [];
+
+  const attachments: { fileToken: string; name: string }[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { file_token, name } = entry as { file_token?: unknown; name?: unknown };
+    if (typeof file_token === 'string' && file_token.trim()) {
+      attachments.push({
+        fileToken: file_token.trim(),
+        name: typeof name === 'string' && name.trim() ? name.trim() : file_token.trim(),
+      });
+    }
+  }
+  return attachments;
+}
+
 // Lark Bitable numeric field `type`s for a single-link and a duplex-link field, per
 // https://open.larksuite.com/document/server-docs/docs/bitable-v1/app-table-field/field-list
 const LINK_FIELD_TYPES = new Set([18, 21]);
@@ -178,6 +210,7 @@ export async function fetchTicket(
   projectField: string,
   token: string,
   uiDesignField?: string,
+  attachmentField?: string,
 ): Promise<LarkTicket> {
   const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records/${ticketId}`;
 
@@ -228,6 +261,8 @@ export async function fetchTicket(
 
   const uiDesignRefs = uiDesignField ? normalizeUiDesignRefs(fields[uiDesignField]) : [];
 
+  const attachments = attachmentField ? extractAttachments(fields[attachmentField]) : [];
+
   return {
     id: ticketId,
     title,
@@ -235,9 +270,85 @@ export async function fetchTicket(
     featureIds,
     projectRecordIds,
     uiDesignRefs,
+    attachments,
     rawFields: fields,
     featureIdFieldIsLink,
   };
+}
+
+/**
+ * Downloads a ticket's extracted attachments (from `LarkTicket.attachments`) into `destDir`,
+ * via Lark's Drive media-download endpoint (`GET /open-apis/drive/v1/medias/:file_token/download`)
+ * — the attachment field's own `url`/`tmp_url` are browser-facing preview links, not a
+ * guaranteed stable authenticated download; `file_token` is the documented way to retrieve the
+ * actual file bytes. Each file's original `name` is sanitized (path separators and other
+ * filesystem-unsafe characters stripped) and de-duplicated against filenames already written in
+ * this same call (`file.png`, `file-2.png`, ...), so two same-named attachments on one ticket
+ * don't overwrite each other.
+ *
+ * A single attachment's failure (stale `file_token`, network error, etc.) is caught and
+ * collected into `failed` rather than thrown, so one bad file doesn't cost every other
+ * attachment that does download successfully — same non-fatal posture callers already expect
+ * from `syncFeatureToLarkTable()`/`updateTicketStatus()`.
+ */
+export async function downloadTicketAttachments(
+  attachments: { fileToken: string; name: string }[],
+  destDir: string,
+  token: string,
+): Promise<{ downloaded: string[]; failed: { name: string; error: string }[] }> {
+  const downloaded: string[] = [];
+  const failed: { name: string; error: string }[] = [];
+  if (attachments.length === 0) return { downloaded, failed };
+
+  fs.mkdirSync(destDir, { recursive: true });
+
+  const usedNames = new Set<string>();
+
+  for (const attachment of attachments) {
+    try {
+      const sanitized = sanitizeFilename(attachment.name);
+      const filename = dedupeFilename(sanitized, usedNames);
+      usedNames.add(filename);
+
+      const url = `https://open.larksuite.com/open-apis/drive/v1/medias/${attachment.fileToken}/download`;
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Lark download error ${response.status}: ${await response.text()}`);
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      fs.writeFileSync(path.join(destDir, filename), buffer);
+      downloaded.push(filename);
+    } catch (err) {
+      failed.push({ name: attachment.name, error: (err as Error).message });
+    }
+  }
+
+  return { downloaded, failed };
+}
+
+/** Strips path separators and other filesystem-unsafe characters from an attachment's name. */
+function sanitizeFilename(name: string): string {
+  const base = name.replace(/[/\\]/g, '_').replace(/[<>:"|?*\x00-\x1f]/g, '_').trim();
+  return base || 'attachment';
+}
+
+/** Appends a numeric suffix before the extension on collision with an already-used filename. */
+function dedupeFilename(filename: string, used: Set<string>): string {
+  if (!used.has(filename)) return filename;
+
+  const ext = path.extname(filename);
+  const stem = filename.slice(0, filename.length - ext.length);
+  let n = 2;
+  let candidate = `${stem}-${n}${ext}`;
+  while (used.has(candidate)) {
+    n += 1;
+    candidate = `${stem}-${n}${ext}`;
+  }
+  return candidate;
 }
 
 /**
@@ -513,8 +624,19 @@ export const larkTicketTool = createTool({
     projectField: z.string(),
     token: z.string(),
     uiDesignField: z.string().optional(),
+    attachmentField: z.string().optional(),
   }),
-  execute: async ({ ticketId, baseId, tableId, featureIdField, titleField, projectField, token, uiDesignField }) => {
+  execute: async ({
+    ticketId,
+    baseId,
+    tableId,
+    featureIdField,
+    titleField,
+    projectField,
+    token,
+    uiDesignField,
+    attachmentField,
+  }) => {
     const ticket = await fetchTicket(
       ticketId,
       baseId,
@@ -524,6 +646,7 @@ export const larkTicketTool = createTool({
       projectField,
       token,
       uiDesignField,
+      attachmentField,
     );
     return ticket;
   },

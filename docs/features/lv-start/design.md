@@ -4,14 +4,14 @@
 
 ## Architecture and layers
 
-`lv start` is an orchestration command that combines input parsing, optional Lark integration, branch naming, feature discovery, feature documentation bootstrapping, state persistence, and Git side effects.
+`lv start` is an orchestration command that combines input parsing, optional Lark integration, branch naming, feature discovery, feature documentation bootstrapping, state persistence, attachment download, and Git side effects.
 
 The code is organized into these layers:
 
 - Command registration in `src/index.ts`
 - Workflow orchestration in `src/cli/start.ts`
 - Configuration and repository path resolution in `src/config.ts`
-- Ticket retrieval, ticket update, and feature-record sync in `src/tools/lark.ts`
+- Ticket retrieval, ticket update, attachment download, and feature-record sync in `src/tools/lark.ts`
 - Branch naming, branch rendering, branch matching, and branch discovery in `src/engine/branch-naming.ts`
 - Feature ID allocation and existing feature discovery in `src/engine/feature-id.ts`
 - Placeholder feature doc generation in `src/cli/bootstrap.ts`
@@ -22,7 +22,7 @@ The code is organized into these layers:
 
 The workflow has three major control paths:
 
-- Ticket-based start, which fetches Lark data and may write back to Lark.
+- Ticket-based start, which fetches Lark data, may download ticket attachments, and may write back to Lark.
 - Description-based start, which avoids Lark and uses free text to build the change context.
 - Resume-aware start, which detects existing branches for the same change ID and lets the engineer resume or restart before any external side effects happen.
 
@@ -40,10 +40,11 @@ Within the ticket-based path, there is a decision point when the ticket has no F
 - `featureIds: string[]`
 - `projectRecordIds: string[]`
 - `uiDesignRefs: string[]`
+- `attachments: { fileToken: string; name: string }[]`
 - `rawFields: Record<string, unknown>`
 - `featureIdFieldIsLink: boolean`
 
-`fetchTicket()` reads the record from the configured Lark Base table, checks whether the configured Feature ID column is a Bitable Link field by inspecting field metadata, and extracts feature IDs accordingly. For link fields it reads linked record text from `text_arr`; for non-link fields it accepts comma-separated strings or string arrays. It also extracts project link record IDs from the configured project field, normalizes UI design references when configured, and preserves the raw fields for later updates.
+`fetchTicket()` reads the record from the configured Lark Base table, checks whether the configured Feature ID column is a Bitable Link field by inspecting field metadata, and extracts feature IDs accordingly. For link fields it reads linked record text from `text_arr`; for non-link fields it accepts comma-separated strings or string arrays. It also extracts project link record IDs from the configured project field, normalizes UI design references when configured, extracts attachment metadata when configured, and preserves the raw fields for later updates.
 
 ### Persisted state
 
@@ -58,6 +59,7 @@ Within the ticket-based path, there is a decision point when the ticket has no F
 - `lv_version`
 - `openspec_changes` with a default of `[]`
 - optional `ui_design`
+- optional `attachments`
 
 `writeState()` creates the `docs/changes/<change-id>/` directory if needed and serializes the schema as YAML. `readState()` is used during resume handling to determine whether the branch already has persisted context.
 
@@ -71,6 +73,7 @@ The relevant configuration shape includes:
 - `lark.title_field`
 - `lark.project_field`
 - `lark.ui_design_field`
+- `lark.attachment_field`
 - `lark.sync_feature_id`
 - `lark.features_table_id`
 - `lark.sync_new_features`
@@ -82,7 +85,7 @@ The relevant configuration shape includes:
 - `lark.sync_status`
 - `default_branch`
 - `default_branch_type`
-- `branch_types` - each entry is either a plain naming-pattern string, or `{ pattern, base_branch? }` to fork that type's branches from something other than `default_branch`
+- `branch_types`, where each entry is either a plain naming-pattern string or `{ pattern, base_branch? }`
 - `feature_id_prefix`
 - `feature_id_digits`
 - `lark_app_id`
@@ -95,7 +98,8 @@ The public entry point is `runStart(ticketId: string | undefined, opts: StartOpt
 Key supporting functions and interfaces are:
 
 - `getTenantAccessToken(appId, appSecret)` in `src/tools/lark.ts`
-- `fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, projectField, token, uiDesignField?)` in `src/tools/lark.ts`
+- `fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, projectField, token, uiDesignField?, attachmentField?)` in `src/tools/lark.ts`
+- `downloadTicketAttachments(attachments, destDir, token)` in `src/tools/lark.ts`
 - `updateTicketFeatureId(ticket, newFeatureIds, baseId, tableId, featureIdField, token, newFeatureRecordIds?)` in `src/tools/lark.ts`
 - `updateTicketStatus(ticket, newStatus, baseId, tableId, statusField, token)` in `src/tools/lark.ts`
 - `syncFeatureToLarkTable(config, larkToken, featureId, title, projectRecordIds?)` in `src/tools/lark.ts`
@@ -120,6 +124,7 @@ Key supporting functions and interfaces are:
 
 - Support both ticket-backed and free-text starts through one command so the change-context workflow stays consistent.
 - Resolve the branch name after loading the ticket, because the ticket title is part of the rendered branch summary.
+- Resolve the base branch from the selected branch type once per invocation, so both fresh branch creation and restart recreation fork from the same type-specific base branch.
 - Treat a missing ticket Feature ID as recoverable instead of failing the command, and try to reuse existing feature docs before allocating new IDs.
 - Allow multiple feature IDs when the change appears to span multiple new features, rather than forcing every start to map to exactly one feature.
 - Generate placeholder feature docs for missing feature directories so ticket-driven starts can bootstrap documentation in the same run.
@@ -128,10 +133,9 @@ Key supporting functions and interfaces are:
 - Detect whether the ticket Feature ID column is a Link field from Lark metadata, because link fields require resolved record IDs rather than plain text values.
 - Perform ticket status update as a separate best-effort write and only when status syncing is enabled.
 - Check for existing branches before Lark or feature-matching work so rerunning `lv start` on an in-progress change can resume cheaply.
-- Resolve the base branch (`resolveBaseBranch()`) from the branch type being started, `--type` or `default_branch_type` if omitted, before checking for an existing branch, so both a fresh `createBranch()` and a restart's `discardLocalBranch()` plus recreate fork from the same type-specific base branch instead of always `default_branch`.
 - Create the branch before writing state and committing so the resulting context is anchored to the intended branch.
 - Use a single YAML state file as the source of truth for the change context.
 - Stage all changes before commit, which means `lv start` can include unrelated dirty files if they are present in the working tree.
-- Keep Lark writes non-fatal so the local LV context can still be created even when ticket sync or feature-table sync fails.
+- Keep Lark writes non-fatal so the local LV context can still be created even when ticket sync, attachment download, or feature-table sync fails.
 - Use LLM-assisted matching and splitting only when existing feature docs are available or when a ticket lacks an explicit Feature ID, so `lv start` can remain automated without forcing a manual mapping step.
-- Preserve optional UI design references from Lark into persisted state so downstream OpenSpec steps can reuse them.
+- Preserve optional UI design references and downloaded attachment paths from Lark into persisted state so downstream OpenSpec steps can reuse them.

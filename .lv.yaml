@@ -39,6 +39,12 @@ lark:
   # Lark URL-type field — lv normalizes whichever shape it reads.
   # ui_design_field: "UI Design"
 
+  # Column holding a ticket's attachments (documents, screenshots, or videos)
+  # as a Lark attachment field. Unset skips attachment capture entirely.
+  # Unlike ui_design_field, lv start downloads each file's content into
+  # docs/changes/<change-id>/attachments/, not just a reference.
+  # attachment_field: "Attachment"
+
   # Column holding the ticket's status (a single-select field), and the value
   # `lv start` writes there once work begins. Default column name "Status",
   # default value "In Dev".

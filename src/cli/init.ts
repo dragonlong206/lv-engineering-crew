@@ -11,6 +11,7 @@ import {
   PROPOSE_STATE_AUTOLOAD_LINE,
   PROPOSE_LINK_CHANGE_LINE,
   PROPOSE_UI_DESIGN_LINE,
+  PROPOSE_ATTACHMENT_LINE,
 } from "../prompts.js";
 
 export interface InitOptions {
@@ -82,6 +83,7 @@ export async function runInit(opts: InitOptions): Promise<void> {
   addProposeStateAutoload(repoRoot);
   addProposeLinkInstruction(repoRoot);
   addProposeUiDesignInstruction(repoRoot);
+  addProposeAttachmentInstruction(repoRoot);
 
   printSuccess("OpenSpec installed and wired to LV context.");
   console.log(`\nNext: run 'lv start <ticket-id>' or 'lv start --description "..."' to begin a change.`);
@@ -275,6 +277,40 @@ function addProposeUiDesignInstruction(repoRoot: string): void {
 
     const indent = match[1];
     const insertion = `${indent}${PROPOSE_UI_DESIGN_LINE}\n\n`;
+    const patched = raw.slice(0, match.index) + insertion + raw.slice(match.index);
+    fs.writeFileSync(filePath, patched, "utf-8");
+  }
+}
+
+/**
+ * Idempotently patches the generated `/opsx:propose` workflow file(s) so they know to read a
+ * change's downloaded ticket attachments (`state.yaml`'s `attachments`) specifically when
+ * writing the `proposal` artifact — see `PROPOSE_ATTACHMENT_LINE` for why this is a
+ * propose-specific patch rather than a line in the generic `context:` pointer. Shares
+ * `addProposeStateAutoload()`'s anchor (step 1's "ask the user" line), same as
+ * `addProposeUiDesignInstruction()`; each patch checks for its own text independently, so this
+ * runs regardless of whether the other patches have already been applied.
+ */
+function addProposeAttachmentInstruction(repoRoot: string): void {
+  for (const relPath of PROPOSE_WORKFLOW_FILES) {
+    const filePath = path.join(repoRoot, relPath);
+    if (!fs.existsSync(filePath)) continue;
+
+    const raw = fs.readFileSync(filePath, "utf-8");
+    if (normalizeWhitespace(raw).includes(normalizeWhitespace(PROPOSE_ATTACHMENT_LINE))) {
+      continue; // already patched
+    }
+
+    const match = raw.match(PROPOSE_ASK_USER_LINE_RE);
+    if (!match || match.index === undefined) {
+      printError(
+        `Could not find the propose workflow's "ask the user" step in ${filePath} — skipping attachment instruction patch. The file may have changed shape upstream.`,
+      );
+      continue;
+    }
+
+    const indent = match[1];
+    const insertion = `${indent}${PROPOSE_ATTACHMENT_LINE}\n\n`;
     const patched = raw.slice(0, match.index) + insertion + raw.slice(match.index);
     fs.writeFileSync(filePath, patched, "utf-8");
   }
