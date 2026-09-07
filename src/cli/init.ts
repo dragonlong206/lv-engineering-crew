@@ -203,6 +203,9 @@ const PROPOSE_WORKFLOW_FILES = [
 const PROPOSE_ASK_USER_LINE_RE =
   /^( *)If no .*input is provided, ask the user \(open-ended, no preset options\):/m;
 
+const LEGACY_PROPOSE_STATE_AUTOLOAD_LINE =
+  "LV Crew: before asking, check for a `docs/changes/<change-id>/state.yaml` whose `branch` field matches the current git branch. If one exists, use its `title` to derive the kebab-case change name and its `description` as the change description below, skipping the question entirely. Only ask the user if no matching `state.yaml` exists, or it has no usable title/description.";
+
 /**
  * Idempotently patches the generated `/opsx:propose` workflow file(s) so they check
  * `docs/changes/<change-id>/state.yaml` for the current branch before asking the engineer to
@@ -220,6 +223,12 @@ function addProposeStateAutoload(repoRoot: string): void {
     const raw = fs.readFileSync(filePath, "utf-8");
     if (normalizeWhitespace(raw).includes(normalizeWhitespace(PROPOSE_STATE_AUTOLOAD_LINE))) {
       continue; // already patched
+    }
+
+    if (raw.includes(LEGACY_PROPOSE_STATE_AUTOLOAD_LINE)) {
+      const patched = raw.replaceAll(LEGACY_PROPOSE_STATE_AUTOLOAD_LINE, PROPOSE_STATE_AUTOLOAD_LINE);
+      fs.writeFileSync(filePath, patched, "utf-8");
+      continue;
     }
 
     const match = raw.match(PROPOSE_ASK_USER_LINE_RE);

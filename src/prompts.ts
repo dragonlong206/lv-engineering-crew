@@ -216,7 +216,7 @@ export const ARCHIVE_GUIDANCE =
 // `openspec instructions` is read, which happens after the workflow's Step 1 (deciding the
 // change name/description) has already run.
 export const PROPOSE_STATE_AUTOLOAD_LINE =
-  "LV Crew: before asking, check for a `docs/changes/<change-id>/state.yaml` whose `branch` field matches the current git branch. If one exists, use its `title` to derive the kebab-case change name and its `description` as the change description below, skipping the question entirely. Only ask the user if no matching `state.yaml` exists, or it has no usable title/description.";
+  "LV Crew: before asking, check for a `docs/changes/<change-id>/state.yaml` whose `branch` field matches the current git branch. If one exists, use its `title` to derive the kebab-case change name and use its non-empty `description` as the change description below; otherwise, fall back to its `title` as the change description. Only ask the user if no matching `state.yaml` exists, or it has no usable title/description.";
 
 // Patched into the generated `/opsx:propose` workflow file(s) by `addProposeLinkInstruction()`
 // in init.ts, as a new line inserted right after that workflow's "Create the change directory"
