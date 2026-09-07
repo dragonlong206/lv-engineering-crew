@@ -19,6 +19,11 @@ export const StateSchema = z.object({
   // from `lark.ui_design_field` when configured. Omitted (not `[]`) when there's nothing to
   // record — see `normalizeUiDesignRefs()` in src/tools/lark.ts.
   ui_design: z.array(z.string()).optional(),
+  // Repo-relative paths of the ticket's attachments (from `lark.attachment_field`),
+  // downloaded by `lv start` into `docs/changes/<change-id>/attachments/`. Omitted (not
+  // `[]`) when there's nothing to record — see `downloadTicketAttachments()` in
+  // src/tools/lark.ts.
+  attachments: z.array(z.string()).optional(),
 });
 export type State = z.infer<typeof StateSchema>;
 
@@ -52,6 +57,11 @@ export const LarkConfigSchema = z.object({
   // field, a Lark attachment field, or a Lark URL-type field — normalized to a flat list of
   // reference strings regardless of shape.
   ui_design_field: z.string().optional(),
+  // Column holding a ticket's attachments (documents, screenshots, or videos) as a Lark
+  // attachment field. Unset skips attachment capture entirely. Unlike `ui_design_field`,
+  // `lv start` downloads each file's content (not just a reference) into
+  // `docs/changes/<change-id>/attachments/`.
+  attachment_field: z.string().optional(),
   // Column holding the ticket's status (a single-select field), read and written as a
   // plain string.
   status_field: z.string().default("Status"),

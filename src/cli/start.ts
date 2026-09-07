@@ -1,10 +1,12 @@
 import fs from "fs";
 import { Agent } from "@mastra/core/agent";
+import path from "path";
 import {
   loadConfig,
   getRepoRoot,
   getFeatureDir,
   getModelForStep,
+  getChangesDir,
 } from "../config.js";
 import {
   fetchTicket,
@@ -12,6 +14,7 @@ import {
   updateTicketFeatureId,
   updateTicketStatus,
   syncFeatureToLarkTable,
+  downloadTicketAttachments,
 } from "../tools/lark.js";
 import {
   createBranch,
@@ -278,7 +281,26 @@ async function startFromTicket(
     config.lark.project_field,
     larkToken,
     config.lark.ui_design_field,
+    config.lark.attachment_field,
   );
+
+  let downloadedAttachmentPaths: string[] = [];
+  if (ticket.attachments.length > 0) {
+    const attachmentsDir = path.join(getChangesDir(repoRoot, ticketId), "attachments");
+    const { downloaded, failed } = await downloadTicketAttachments(
+      ticket.attachments,
+      attachmentsDir,
+      larkToken,
+    );
+    downloadedAttachmentPaths = downloaded.map((filename) =>
+      path.relative(repoRoot, path.join(attachmentsDir, filename)),
+    );
+    for (const failure of failed) {
+      printWarn(
+        `Failed to download attachment '${failure.name}': ${failure.error}. Continuing.`,
+      );
+    }
+  }
 
   // Branch name embeds the ticket title as a summary slug, so it's rendered once we have the
   // ticket in hand rather than up front — unless we're resuming on an already-checked-out
@@ -463,6 +485,9 @@ async function startFromTicket(
     openspec_changes: [],
     ...(ticket.uiDesignRefs.length > 0
       ? { ui_design: ticket.uiDesignRefs }
+      : {}),
+    ...(downloadedAttachmentPaths.length > 0
+      ? { attachments: downloadedAttachmentPaths }
       : {}),
   };
   writeState(repoRoot, ticketId, state);

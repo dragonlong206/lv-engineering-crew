@@ -34,6 +34,8 @@ When the user is ready to implement, they must start the apply workflow explicit
 
    LV Crew: that same `state.yaml` may also have a non-empty `ui_design`. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), attempt to view or fetch each reference and reflect what you observe in `proposal.md`'s "What Changes" and "Impact" sections — for a Figma URL, prefer the Figma Dev Mode MCP Server's tools (e.g. `get_code`, `get_screenshot`, `get_variable_defs`) when one is configured in your environment; otherwise use `WebFetch` for a URL, or read a local/downloadable image or PDF directly. If the asset can't be accessed by any available method, fall back to citing the raw reference string.
 
+   LV Crew: that same `state.yaml` may also have a non-empty `attachments` — repo-relative paths to files `lv start` already downloaded from the ticket. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), read each listed file directly (no fetch needed) and reflect what you observe in `proposal.md`'s "What Changes" and "Impact" sections. If a file's format can't be read directly (e.g. a video), cite its name and path instead of guessing at its content.
+
    If no input is provided, ask the user (open-ended, no preset options):
    > "What change do you want to work on? Describe what you want to build or fix."
 
