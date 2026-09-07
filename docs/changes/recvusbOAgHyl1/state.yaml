@@ -1,0 +1,13 @@
+ticket_id: recvusbOAgHyl1
+title: OpenSpec propose can read attachments from ticket if exists
+description: >-
+  Ticket has "Attachment" field, which contains related documents or screenshots
+  or videos. In case this field has value, we can download the files to the
+  /docs/changes folder and then update OpenSpec propose skill to read these
+  files for the context.
+feature_ids:
+  - lv-start
+branch: feature/recvusbOAgHyl1-openspec-propose-can-read-attachments-from-ticket
+created_at: '2026-09-07T07:43:13.003Z'
+lv_version: 0.1.0
+openspec_changes: []
