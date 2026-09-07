@@ -59,9 +59,18 @@ default_branch: main
 #   { feature: "feature/{ticket_id}-{summary}", hotfix: "hotfix/{ticket_id}-{summary}" }
 # `lv start <id> --type hotfix` picks a type explicitly; default_branch_type is
 # used otherwise.
+#
+# An entry can be a plain pattern string (forks from default_branch above), or
+# an object with a base_branch to fork that type from something else instead —
+# useful for a gitflow-style repo where hotfixes branch off a stable branch
+# while features branch off an integration branch:
 # branch_types:
-#   feature: "feature/{ticket_id}-{summary}"
-#   hotfix: "hotfix/{ticket_id}-{summary}"
+#   feature:
+#     pattern: "feature/{ticket_id}-{summary}"
+#     base_branch: develop
+#   hotfix:
+#     pattern: "hotfix/{ticket_id}-{summary}"
+#     base_branch: master
 # default_branch_type: feature
 
 # Default model — used when no per-step model is declared

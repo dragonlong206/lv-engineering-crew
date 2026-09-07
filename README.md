@@ -70,9 +70,18 @@ default_branch: main
 # ({summary} is a slug of the ticket title, filled in by `lv start`). Omit to
 # use the built-in default:
 #   { feature: "feature/{ticket_id}-{summary}", hotfix: "hotfix/{ticket_id}-{summary}" }
+#
+# An entry can be a plain pattern string (forks from default_branch above), or
+# an object with a base_branch to fork that type from something else instead —
+# e.g. a gitflow-style repo where hotfixes branch off master while features
+# branch off develop:
 branch_types:
-  feature: "feature/{ticket_id}-{summary}"
-  hotfix: "hotfix/{ticket_id}-{summary}"
+  feature:
+    pattern: "feature/{ticket_id}-{summary}"
+    base_branch: develop
+  hotfix:
+    pattern: "hotfix/{ticket_id}-{summary}"
+    base_branch: master
 default_branch_type: feature # used when `lv start` is run without --type
 
 model: openai/gpt-4o # default model
@@ -190,7 +199,7 @@ lv start --description "Let support issue refunds" # no Lark ticket — change-i
 By ticket ID:
 
 - Fetches the record from Lark Base; feature IDs with no `docs/features/<id>/` yet are bootstrapped inline (see `lv bootstrap`'s autonomous-scan mode) with a human review gate before continuing
-- Creates the branch (named per `--type`'s pattern in `.lv.yaml`'s `branch_types`, or `default_branch_type` if omitted, with `{summary}` filled in from the ticket title) from the default branch
+- Creates the branch (named per `--type`'s pattern in `.lv.yaml`'s `branch_types`, or `default_branch_type` if omitted, with `{summary}` filled in from the ticket title) from that type's configured `base_branch`, or `default_branch` if the type has none configured
 - Writes `docs/changes/<ticket-id>/state.yaml` with the ticket's title, description, feature IDs, and (when `lark.ui_design_field` is configured and set) its UI design reference — this is LV's only artifact for the change; no analysis document is generated
 - Commits and pushes the branch
 

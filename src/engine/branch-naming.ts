@@ -29,8 +29,28 @@ export function slugify(text: string, maxLength = 50): string {
   return slug.slice(0, maxLength).replace(/-+$/g, '');
 }
 
+/** Unwraps a `branch_types` entry (plain pattern string, or `{ pattern, base_branch? }`) to its naming pattern. */
+function patternOf(entry: string | { pattern: string; base_branch?: string }): string {
+  return typeof entry === "string" ? entry : entry.pattern;
+}
+
 export function getBranchTypes(config: Config): Record<string, string> {
-  return config.branch_types ?? DEFAULT_BRANCH_TYPES;
+  const types = config.branch_types ?? DEFAULT_BRANCH_TYPES;
+  return Object.fromEntries(
+    Object.entries(types).map(([type, entry]) => [type, patternOf(entry)]),
+  );
+}
+
+/**
+ * The base branch to create/recreate `type`'s branches from — its configured `base_branch`
+ * if set (only possible for the `{ pattern, base_branch? }` object form), else `config.default_branch`.
+ */
+export function resolveBaseBranch(config: Config, type: string): string {
+  const entry = config.branch_types?.[type];
+  if (entry && typeof entry === "object" && entry.base_branch) {
+    return entry.base_branch;
+  }
+  return config.default_branch;
 }
 
 /** Render a branch name for the given ticket ID and type (defaults to config.default_branch_type). */
