@@ -1,0 +1,9 @@
+ticket_id: recvusbDWII4py
+title: OpenSpec propose changes in Codex does not read context from state.yaml
+description: ''
+feature_ids:
+  - lv-start
+branch: feature/recvusbDWII4py-openspec-propose-changes-in-codex-does-not-read-co
+created_at: '2026-09-07T05:15:45.806Z'
+lv_version: 0.1.0
+openspec_changes: []
