@@ -60,6 +60,21 @@ The system SHALL augment the installed OpenSpec skill/command files so OpenSpec'
 - **WHEN** the engineer runs an OpenSpec workflow on a change started from a free-text description (no ticket)
 - **THEN** the workflow's context includes that description as recorded in `docs/changes/<change-id>/state.yaml`, without the engineer re-typing it
 
+### Requirement: Propose workflow falls back to state title when description is empty
+When `lv init` patches the installed `/opsx:propose` workflow file(s) with LV's state-autoload instruction, that instruction SHALL treat a matching `docs/changes/<change-id>/state.yaml` as usable when it has a non-empty `title` even if `description` is empty. In that case, the workflow SHALL derive the kebab-case change name from `title` and SHALL use `title` as the change description fallback instead of asking the engineer to restate the change. When `description` is non-empty, the workflow SHALL continue to prefer `description` as the change description.
+
+#### Scenario: Empty description falls back to title
+- **WHEN** the engineer runs `/opsx:propose` on a branch whose matching `docs/changes/<change-id>/state.yaml` has a non-empty `title` and an empty `description`
+- **THEN** the workflow derives the change name from `title`, uses `title` as the change description for the proposal flow, and does not ask the engineer to describe the change again
+
+#### Scenario: Non-empty description remains preferred
+- **WHEN** the engineer runs `/opsx:propose` on a branch whose matching `docs/changes/<change-id>/state.yaml` has both a non-empty `title` and a non-empty `description`
+- **THEN** the workflow derives the change name from `title` and uses `description` as the change description, preserving the current preferred source order
+
+#### Scenario: No usable state context still asks the engineer
+- **WHEN** the engineer runs `/opsx:propose` and there is no matching `state.yaml`, or the matching file has no usable `title` and no usable `description`
+- **THEN** the workflow asks the engineer to describe the change instead of inventing missing context
+
 ### Requirement: Propose workflow analyzes a ticket's UI design reference when writing the proposal
 When the current change's `docs/changes/<change-id>/state.yaml` has a non-empty `ui_design`, the system SHALL patch the installed `/opsx:propose` workflow file(s) so that, specifically when creating the `proposal` artifact, the workflow attempts to view or fetch the content each reference points to — preferring the Figma Dev Mode MCP Server's tools (e.g. `get_code`, `get_screenshot`, `get_variable_defs`) for a Figma URL when one is configured in the engineer's environment, and otherwise falling back to `WebFetch` (for a URL) or reading a local/downloadable image or PDF — and reflect what it observes in `proposal.md`'s "What Changes" and "Impact" sections, falling back further to citing the raw reference string when the asset can't be accessed by any available method. This instruction SHALL be scoped to the `/opsx:propose` workflow file(s) only, not the generic OpenSpec `context:` pointer that every workflow reads, since only the `proposal` artifact reflects this analysis.
 

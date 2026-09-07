@@ -30,7 +30,7 @@ When the user is ready to implement, they must start the apply workflow explicit
 
 1. **Understand the request and clarify material ambiguity**
 
-   LV Crew: before asking, check for a `docs/changes/<change-id>/state.yaml` whose `branch` field matches the current git branch. If one exists, use its `title` to derive the kebab-case change name and its `description` as the change description below, skipping the question entirely. Only ask the user if no matching `state.yaml` exists, or it has no usable title/description.
+   LV Crew: before asking, check for a `docs/changes/<change-id>/state.yaml` whose `branch` field matches the current git branch. If one exists, use its `title` to derive the kebab-case change name and use its non-empty `description` as the change description below; otherwise, fall back to its `title` as the change description. Only ask the user if no matching `state.yaml` exists, or it has no usable title/description.
 
    LV Crew: that same `state.yaml` may also have a non-empty `ui_design`. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), attempt to view or fetch each reference and reflect what you observe in `proposal.md`'s "What Changes" and "Impact" sections — for a Figma URL, prefer the Figma Dev Mode MCP Server's tools (e.g. `get_code`, `get_screenshot`, `get_variable_defs`) when one is configured in your environment; otherwise use `WebFetch` for a URL, or read a local/downloadable image or PDF directly. If the asset can't be accessed by any available method, fall back to citing the raw reference string.
 

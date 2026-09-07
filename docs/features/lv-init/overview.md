@@ -2,7 +2,7 @@
 
 # lv init
 
-`lv init` installs OpenSpec into the current repository and wires the generated OpenSpec workflows to LV-specific context. It is the setup command for OpenSpec integration in LV. It does not generate feature docs and it does not allocate feature IDs.
+`lv init` installs and configures OpenSpec for the current repository, then wires OpenSpec’s generated workflows to LV-specific context. It is the setup command for OpenSpec integration in LV. It does not generate feature docs and it does not allocate feature IDs.
 
 ## Main components
 
@@ -16,7 +16,7 @@
 2. It checks whether `openspec` is available on `PATH` using `which.sync("openspec", { nothrow: true })`.
 3. If OpenSpec is missing, it prompts to install `@fission-ai/openspec` globally with npm. If the user declines, the command prints a manual install hint and stops.
 4. It runs `openspec init <repoRoot>`, passing `--tools <tool>` when `--tool` is provided.
-5. After OpenSpec installs, it patches the generated files in place:
+5. After OpenSpec installs, it patches generated files in place:
    - `openspec/config.yaml` gets a `context:` block that points OpenSpec at LV feature docs, the current change state, a convention for `/opsx:sync`, and the configured output language if any.
    - `openspec/config.yaml` gets `operations.archive.guidance` that tells archive workflows to refresh touched feature docs before finishing.
    - generated `/opsx:propose` workflow files, when present, are patched to:
