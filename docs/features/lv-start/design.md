@@ -82,7 +82,7 @@ The relevant configuration shape includes:
 - `lark.sync_status`
 - `default_branch`
 - `default_branch_type`
-- `branch_types`
+- `branch_types` - each entry is either a plain naming-pattern string, or `{ pattern, base_branch? }` to fork that type's branches from something other than `default_branch`
 - `feature_id_prefix`
 - `feature_id_digits`
 - `lark_app_id`
@@ -102,6 +102,7 @@ Key supporting functions and interfaces are:
 - `allocateFeatureIds(repoRoot, count, prefix, digits)` in `src/engine/feature-id.ts`
 - `listExistingFeatures(repoRoot)` in `src/engine/feature-id.ts`
 - `renderBranchName(config, ticketId, { type?, summary? })` in `src/engine/branch-naming.ts`
+- `resolveBaseBranch(config, type)` in `src/engine/branch-naming.ts`
 - `findChangeBranches(repoRoot, config, changeId)` in `src/engine/branch-naming.ts`
 - `createBranch(repoRoot, branchName, fromBranch)` in `src/integrations/git/client.ts`
 - `checkoutBranch(repoRoot, branchName)` in `src/integrations/git/client.ts`
@@ -127,6 +128,7 @@ Key supporting functions and interfaces are:
 - Detect whether the ticket Feature ID column is a Link field from Lark metadata, because link fields require resolved record IDs rather than plain text values.
 - Perform ticket status update as a separate best-effort write and only when status syncing is enabled.
 - Check for existing branches before Lark or feature-matching work so rerunning `lv start` on an in-progress change can resume cheaply.
+- Resolve the base branch (`resolveBaseBranch()`) from the branch type being started, `--type` or `default_branch_type` if omitted, before checking for an existing branch, so both a fresh `createBranch()` and a restart's `discardLocalBranch()` plus recreate fork from the same type-specific base branch instead of always `default_branch`.
 - Create the branch before writing state and committing so the resulting context is anchored to the intended branch.
 - Use a single YAML state file as the source of truth for the change context.
 - Stage all changes before commit, which means `lv start` can include unrelated dirty files if they are present in the working tree.

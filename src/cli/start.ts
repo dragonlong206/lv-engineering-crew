@@ -25,6 +25,7 @@ import {
   renderBranchName,
   slugify,
   findChangeBranches,
+  resolveBaseBranch,
 } from "../engine/branch-naming.js";
 import {
   allocateFeatureIds,
@@ -170,11 +171,16 @@ export interface StartOptions {
  * `existingBranchName` set when the caller should check out that branch instead of creating a
  * new one (resume with no `state.yaml` yet) — left undefined when there was no existing branch,
  * or the engineer chose to restart and it was discarded.
+ *
+ * `baseBranch` is the base branch resolved for the type actually being started (see
+ * `resolveBaseBranch()`) — used to recreate the branch from on restart, so a restarted branch
+ * forks from the same base branch a fresh start of that type would use.
  */
 async function resolveExistingBranch(
   repoRoot: string,
   config: Config,
   changeId: string,
+  baseBranch: string,
 ): Promise<
   { action: "resumed" } | { action: "continue"; existingBranchName?: string }
 > {
@@ -191,7 +197,7 @@ async function resolveExistingBranch(
 
   const choice = await promptResumeOrRestart(branchName);
   if (choice === "restart") {
-    await discardLocalBranch(repoRoot, branchName, config.default_branch);
+    await discardLocalBranch(repoRoot, branchName, baseBranch);
     return { action: "continue" };
   }
 
@@ -238,7 +244,15 @@ async function startFromTicket(
   const config = loadConfig();
   const repoRoot = getRepoRoot();
 
-  const existing = await resolveExistingBranch(repoRoot, config, ticketId);
+  const branchType = opts.type ?? config.default_branch_type;
+  const baseBranch = resolveBaseBranch(config, branchType);
+
+  const existing = await resolveExistingBranch(
+    repoRoot,
+    config,
+    ticketId,
+    baseBranch,
+  );
   if (existing.action === "resumed") return;
   const existingBranchName = existing.existingBranchName;
 
@@ -434,7 +448,7 @@ async function startFromTicket(
     printInfo(`Continuing on existing branch ${existingBranchName}...`);
   } else {
     printInfo(`Creating branch ${branchName}...`);
-    await createBranch(repoRoot, branchName, config.default_branch);
+    await createBranch(repoRoot, branchName, baseBranch);
   }
 
   const now = new Date().toISOString();
@@ -469,7 +483,15 @@ async function startFromDescription(
   const title = deriveTitle(description);
   const changeId = changeIdSlug(title) || `change_${Date.now()}`;
 
-  const existing = await resolveExistingBranch(repoRoot, config, changeId);
+  const branchType = opts.type ?? config.default_branch_type;
+  const baseBranch = resolveBaseBranch(config, branchType);
+
+  const existing = await resolveExistingBranch(
+    repoRoot,
+    config,
+    changeId,
+    baseBranch,
+  );
   if (existing.action === "resumed") return;
   const existingBranchName = existing.existingBranchName;
 
@@ -501,7 +523,7 @@ async function startFromDescription(
     printInfo(`Continuing on existing branch ${existingBranchName}...`);
   } else {
     printInfo(`Creating branch ${branchName}...`);
-    await createBranch(repoRoot, branchName, config.default_branch);
+    await createBranch(repoRoot, branchName, baseBranch);
   }
 
   const now = new Date().toISOString();

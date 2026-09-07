@@ -76,8 +76,18 @@ export const ConfigSchema = z.object({
   feature_id_prefix: z.string().default("F"),
   feature_id_digits: z.number().int().positive().default(4),
   // Branch naming per type, e.g. { feature: "lv/{ticket_id}", hotfix: "hotfix/{ticket_id}" }.
-  // Omit to use the built-in default (src/engine/branch-naming.ts).
-  branch_types: z.record(z.string(), z.string()).optional(),
+  // Omit to use the built-in default (src/engine/branch-naming.ts). An entry may also be an
+  // object with a `base_branch` to fork that type's branches from something other than
+  // `default_branch` (e.g. hotfix from "master" while feature forks from "develop").
+  branch_types: z
+    .record(
+      z.string(),
+      z.union([
+        z.string(),
+        z.object({ pattern: z.string(), base_branch: z.string().optional() }),
+      ]),
+    )
+    .optional(),
   default_branch_type: z.string().default("feature"),
   // Override which files `lv bootstrap`/`lv init` read from the target repo.
   // Omit either to use the built-in default list (src/tools/codebase.ts).
