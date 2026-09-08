@@ -72,6 +72,10 @@ export function getModelForStep(config: Config, step: 'bootstrap'): string {
   return config.models?.[step] ?? config.model;
 }
 
+export function isTracingEnabled(config: Config): boolean {
+  return config.tracing?.enabled ?? true;
+}
+
 /** Path to the shared Mastra/LibSQL db file, creating its parent dir if needed. */
 export function getLvDbPath(): string {
   const dbPath = path.join(os.homedir(), '.config', 'lv', 'lv.db');

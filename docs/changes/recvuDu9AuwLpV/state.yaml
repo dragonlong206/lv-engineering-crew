@@ -8,4 +8,5 @@ feature_ids:
 branch: feature/recvuDu9AuwLpV-enable-tracing-when-using-mastra
 created_at: '2026-09-08T13:44:11.629Z'
 lv_version: 0.1.0
-openspec_changes: []
+openspec_changes:
+  - enable-tracing-when-using-mastra
