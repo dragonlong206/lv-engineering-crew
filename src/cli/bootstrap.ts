@@ -8,7 +8,16 @@ import {
 } from "../config.js";
 import { Agent } from "@mastra/core/agent";
 import { registerAgent } from "../mastra/index.js";
-import { printInfo, printSuccess, printError, printWarn, writeFile, extractText, extractJson } from "./helpers.js";
+import {
+  printInfo,
+  printSuccess,
+  printError,
+  printWarn,
+  writeFile,
+  extractText,
+  extractJson,
+  JsonExtractionError,
+} from "./helpers.js";
 import {
   AUTO_GENERATED_HEADER,
   buildBootstrapOverviewPrompt,
@@ -16,18 +25,22 @@ import {
   buildBootstrapScanPrompt,
   buildBootstrapPlaceholderOverview,
   buildBootstrapPlaceholderDesign,
+  BOOTSTRAP_SCAN_JSON_RETRY_NUDGE,
 } from "../prompts.js";
 import { listCodeFiles } from "../tools/codebase.js";
 import { createBootstrapScanAgent } from "../agents/bootstrap-agent.js";
 import { getTenantAccessToken, syncFeatureToLarkTable } from "../tools/lark.js";
 import type { Config } from "../types.js";
 
-const bootstrapAgent = registerAgent(new Agent({
-  id: "lv-bootstrap-agent",
-  name: "LV Bootstrap Agent",
-  model: "openai/gpt-4o-mini",
-  instructions: "You are a documentation generation assistant. Follow the user's prompt exactly and return only the requested content.",
-}));
+const bootstrapAgent = registerAgent(
+  new Agent({
+    id: "lv-bootstrap-agent",
+    name: "LV Bootstrap Agent",
+    model: "openai/gpt-4o-mini",
+    instructions:
+      "You are a documentation generation assistant. Follow the user's prompt exactly and return only the requested content.",
+  }),
+);
 
 export interface BootstrapScanHint {
   name?: string;
@@ -36,7 +49,10 @@ export interface BootstrapScanHint {
 }
 
 /** First non-empty, non-comment line of generated overview.md, for a short human-readable title. */
-function deriveFeatureTitle(overviewMarkdown: string, featureId: string): string {
+function deriveFeatureTitle(
+  overviewMarkdown: string,
+  featureId: string,
+): string {
   const line = overviewMarkdown
     .split("\n")
     .map((l) => l.trim())
@@ -67,7 +83,10 @@ async function syncNewFeatureToLark(
     return;
   }
 
-  const larkToken = await getTenantAccessToken(config.lark_app_id, config.lark_app_secret);
+  const larkToken = await getTenantAccessToken(
+    config.lark_app_id,
+    config.lark_app_secret,
+  );
   await syncFeatureToLarkTable(config, larkToken, featureId, title);
 }
 
@@ -86,7 +105,9 @@ export async function runBootstrap(
 
   if (opts?.newFeature) {
     if (pathsArg || hint?.name || hint?.description) {
-      printWarn("--paths/--name/--description are ignored when --new-feature is set.");
+      printWarn(
+        "--paths/--name/--description are ignored when --new-feature is set.",
+      );
     }
     await runBootstrapPlaceholder(config, repoRoot, featureId);
   } else if (pathsArg) {
@@ -127,7 +148,11 @@ async function runBootstrapFromPaths(
 
     const stat = fs.statSync(absPath);
     if (stat.isDirectory()) {
-      const files = listCodeFiles(absPath, config.scan_extensions, config.scan_skip_dirs).slice(0, 50); // limit
+      const files = listCodeFiles(
+        absPath,
+        config.scan_extensions,
+        config.scan_skip_dirs,
+      ).slice(0, 50); // limit
       for (const file of files) {
         const rel = path.relative(repoRoot, file);
         const content = fs.readFileSync(file, "utf-8");
@@ -147,8 +172,18 @@ async function runBootstrapFromPaths(
   const model = getModelForStep(config, "bootstrap");
 
   const [overviewResult, designResult] = await Promise.all([
-    bootstrapAgent.generate(buildBootstrapOverviewPrompt(featureId, codeBlock, config.output_language), { model }),
-    bootstrapAgent.generate(buildBootstrapDesignPrompt(featureId, codeBlock, config.output_language), { model }),
+    bootstrapAgent.generate(
+      buildBootstrapOverviewPrompt(
+        featureId,
+        codeBlock,
+        config.output_language,
+      ),
+      { model },
+    ),
+    bootstrapAgent.generate(
+      buildBootstrapDesignPrompt(featureId, codeBlock, config.output_language),
+      { model },
+    ),
   ]);
 
   const overviewText = extractText(overviewResult);
@@ -161,11 +196,18 @@ async function runBootstrapFromPaths(
     path.join(featureDir, "overview.md"),
     AUTO_GENERATED_HEADER + overviewText,
   );
-  writeFile(path.join(featureDir, "design.md"), AUTO_GENERATED_HEADER + designText);
+  writeFile(
+    path.join(featureDir, "design.md"),
+    AUTO_GENERATED_HEADER + designText,
+  );
 
   updateIndex(repoRoot, featureId);
 
-  await syncNewFeatureToLark(config, featureId, deriveFeatureTitle(overviewText, featureId));
+  await syncNewFeatureToLark(
+    config,
+    featureId,
+    deriveFeatureTitle(overviewText, featureId),
+  );
 
   printSuccess(`Generated docs for '${featureId}'.`);
   console.log(`\nFiles written (not committed):`);
@@ -178,6 +220,21 @@ export interface GeneratedFeatureDocs {
   featureDir: string;
   overviewPath: string;
   designPath: string;
+}
+
+/**
+ * Thrown by `generateFeatureDocsFromScan()` when the scan agent's response still isn't valid
+ * JSON after the one corrective retry — a distinct type so callers can report it as a clean,
+ * actionable CLI error instead of letting it fall through to a generic failure message.
+ */
+export class ScanJsonFailureError extends Error {
+  constructor(featureId: string, cause: JsonExtractionError) {
+    super(
+      `Bootstrap scan for feature '${featureId}' failed: the LLM did not return the expected JSON, even after a corrective retry. ${cause.message}`,
+      { cause },
+    );
+    this.name = "ScanJsonFailureError";
+  }
 }
 
 /**
@@ -212,10 +269,39 @@ export async function generateFeatureDocsFromScan(
     hint?.uiDesignRefs,
     config.output_language,
   );
-  const scanAgent = createBootstrapScanAgent(config.scan_extensions, config.scan_skip_dirs, config.output_language);
-  const result = await scanAgent.generate(prompt, { model, maxSteps: 18 });
+  const scanAgent = createBootstrapScanAgent(
+    config.scan_extensions,
+    config.scan_skip_dirs,
+    config.output_language,
+  );
+  const result = await scanAgent.generate(prompt, { model, maxSteps: 30 });
   const text = extractText(result);
-  const parsed = extractJson<{ overviewMarkdown: string; designMarkdown: string }>(text);
+
+  let parsed: { overviewMarkdown: string; designMarkdown: string };
+  try {
+    parsed = extractJson(text);
+  } catch (err) {
+    if (!(err instanceof JsonExtractionError)) throw err;
+
+    // Corrective retry: continue the same conversation (reusing whatever exploration the
+    // agent already did) with one explicit nudge to answer with JSON now, instead of
+    // re-running the scan from scratch.
+    const retryResult = await scanAgent.generate(
+      [
+        { role: "user", content: prompt },
+        ...(result.response?.messages ?? []),
+        { role: "user", content: BOOTSTRAP_SCAN_JSON_RETRY_NUDGE },
+      ],
+      { model, maxSteps: 5 },
+    );
+    const retryText = extractText(retryResult);
+    try {
+      parsed = extractJson(retryText);
+    } catch (retryErr) {
+      if (!(retryErr instanceof JsonExtractionError)) throw retryErr;
+      throw new ScanJsonFailureError(featureId, retryErr);
+    }
+  }
 
   fs.mkdirSync(featureDir, { recursive: true });
   writeFile(overviewPath, AUTO_GENERATED_HEADER + parsed.overviewMarkdown);
@@ -241,8 +327,14 @@ export function generateFeatureDocsPlaceholder(
   const designPath = path.join(featureDir, "design.md");
 
   fs.mkdirSync(featureDir, { recursive: true });
-  writeFile(overviewPath, AUTO_GENERATED_HEADER + buildBootstrapPlaceholderOverview(featureId));
-  writeFile(designPath, AUTO_GENERATED_HEADER + buildBootstrapPlaceholderDesign(featureId));
+  writeFile(
+    overviewPath,
+    AUTO_GENERATED_HEADER + buildBootstrapPlaceholderOverview(featureId),
+  );
+  writeFile(
+    designPath,
+    AUTO_GENERATED_HEADER + buildBootstrapPlaceholderDesign(featureId),
+  );
 
   updateIndex(repoRoot, featureId);
 
@@ -256,7 +348,10 @@ async function runBootstrapPlaceholder(
 ): Promise<void> {
   printInfo(`Writing placeholder docs for new feature '${featureId}'...`);
 
-  const { overviewPath, designPath } = generateFeatureDocsPlaceholder(repoRoot, featureId);
+  const { overviewPath, designPath } = generateFeatureDocsPlaceholder(
+    repoRoot,
+    featureId,
+  );
 
   await syncNewFeatureToLark(config, featureId, featureId);
 
@@ -276,14 +371,24 @@ async function runBootstrapFromScan(
   const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
   const alreadyExists = fs.existsSync(path.join(featureDir, "overview.md"));
 
-  printInfo(`Scanning codebase to ${alreadyExists ? "refine" : "generate"} docs for feature '${featureId}'...`);
-
-  const { overviewPath, designPath } = await generateFeatureDocsFromScan(
-    config,
-    repoRoot,
-    featureId,
-    hint,
+  printInfo(
+    `Scanning codebase to ${alreadyExists ? "refine" : "generate"} docs for feature '${featureId}'...`,
   );
+
+  let overviewPath: string;
+  let designPath: string;
+  try {
+    ({ overviewPath, designPath } = await generateFeatureDocsFromScan(
+      config,
+      repoRoot,
+      featureId,
+      hint,
+    ));
+  } catch (err) {
+    if (!(err instanceof ScanJsonFailureError)) throw err;
+    printError(err.message);
+    process.exit(1);
+  }
 
   const overviewMarkdown = fs.readFileSync(overviewPath, "utf-8");
   await syncNewFeatureToLark(

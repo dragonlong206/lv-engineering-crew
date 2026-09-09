@@ -125,8 +125,21 @@ export function extractText(result: { text: string }): string {
   return result.text ?? '';
 }
 
+/**
+ * `extractJson()` throws this (instead of letting a bare `JSON.parse` `SyntaxError` escape) so
+ * callers and the final CLI error both have a snippet of what the model actually said to show
+ * the engineer.
+ */
+export class JsonExtractionError extends Error {
+  constructor(public readonly snippet: string, cause: unknown) {
+    super(`Response did not contain valid JSON. Model responded with: "${snippet}"`, { cause });
+    this.name = 'JsonExtractionError';
+  }
+}
+
 export function extractJson<T>(text: string): T {
   const trimmed = text.trim();
+  const snippet = trimmed.length > 200 ? `${trimmed.slice(0, 200)}...` : trimmed;
   const fenceMatch = trimmed.match(/^```(?:json|markdown)?\s*([\s\S]*?)\s*```$/);
   const candidate = fenceMatch ? fenceMatch[1] : trimmed;
 
@@ -134,7 +147,13 @@ export function extractJson<T>(text: string): T {
   // otherwise-valid JSON object. Parse only the balanced top-level {...} region instead of
   // trusting the whole string, so trailing garbage doesn't break JSON.parse.
   const start = candidate.indexOf('{');
-  if (start === -1) return JSON.parse(candidate) as T;
+  if (start === -1) {
+    try {
+      return JSON.parse(candidate) as T;
+    } catch (err) {
+      throw new JsonExtractionError(snippet, err);
+    }
+  }
 
   let depth = 0;
   let inString = false;
@@ -160,7 +179,11 @@ export function extractJson<T>(text: string): T {
   }
 
   const jsonStr = end !== -1 ? candidate.slice(start, end + 1) : candidate;
-  return JSON.parse(jsonStr) as T;
+  try {
+    return JSON.parse(jsonStr) as T;
+  } catch (err) {
+    throw new JsonExtractionError(snippet, err);
+  }
 }
 
 export function extractUsage(result: {
