@@ -7,6 +7,7 @@ import {
   getModelForStep,
 } from "../config.js";
 import { Agent } from "@mastra/core/agent";
+import { registerAgent } from "../mastra/index.js";
 import { printInfo, printSuccess, printError, printWarn, writeFile, extractText, extractJson } from "./helpers.js";
 import {
   AUTO_GENERATED_HEADER,
@@ -21,12 +22,12 @@ import { createBootstrapScanAgent } from "../agents/bootstrap-agent.js";
 import { getTenantAccessToken, syncFeatureToLarkTable } from "../tools/lark.js";
 import type { Config } from "../types.js";
 
-const bootstrapAgent = new Agent({
+const bootstrapAgent = registerAgent(new Agent({
   id: "lv-bootstrap-agent",
   name: "LV Bootstrap Agent",
   model: "openai/gpt-4o-mini",
   instructions: "You are a documentation generation assistant. Follow the user's prompt exactly and return only the requested content.",
-});
+}));
 
 export interface BootstrapScanHint {
   name?: string;
