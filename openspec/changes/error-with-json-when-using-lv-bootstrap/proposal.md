@@ -5,8 +5,9 @@
 ## What Changes
 
 - `extractJson()` throws a clear, actionable error (naming the artifact/call site and including a snippet of the actual response) when no JSON object can be found, instead of letting a raw `JSON.parse` `SyntaxError` propagate.
+- `generateFeatureDocsFromScan()`'s scan-agent call (`src/cli/bootstrap.ts`) raises `maxSteps` from 18 to 30, since Anthropic models narrate ("Now let's...") before tool calls far more often than OpenAI models — each narrated turn still counts as a step, and this reproduces the reported bug on Anthropic while leaving OpenAI unaffected.
 - The autonomous-scan flow (`generateFeatureDocsFromScan()` in `src/cli/bootstrap.ts`) detects a non-JSON or incomplete scan-agent response (including hitting `maxSteps` without a final answer) and retries once with an explicit follow-up turn asking the agent to emit the required JSON immediately, before giving up.
-- If the retry also fails, `lv bootstrap` (and `lv start`'s inline feature bootstrap, which shares this code path) exits with a clear, actionable error via the existing `printError`/`process.exit(1)` pattern instead of crashing with an unhandled exception.
+- If the retry also fails, `lv bootstrap` exits with a clear, actionable error via the existing `printError`/`process.exit(1)` pattern instead of crashing with an unhandled exception.
 
 ## Capabilities
 
@@ -19,6 +20,6 @@
 ## Impact
 
 - `src/cli/helpers.ts` — `extractJson()` error handling.
-- `src/cli/bootstrap.ts` — `generateFeatureDocsFromScan()`, used by both `lv bootstrap` (autonomous-scan mode) and `lv start`'s inline feature bootstrap.
+- `src/cli/bootstrap.ts` — `generateFeatureDocsFromScan()`, called by `lv bootstrap`'s autonomous-scan mode via `runBootstrapFromScan()`. (`lv start`'s inline feature bootstrap does not currently call this path — it only writes new-feature placeholder docs via `generateFeatureDocsPlaceholder()` — so it is unaffected by and out of scope for this change.)
 - No changes to `src/cli/start.ts`'s other `extractJson()` call sites (`matchExistingFeature`, `inferFeatureSplit`) beyond benefiting from `extractJson()`'s clearer failure message — they are single-shot, non-tool-calling agent calls and are not in scope for the retry-with-nudge behavior.
 - No breaking changes to the CLI's public command interface or output file formats.

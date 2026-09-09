@@ -133,6 +133,14 @@ Return ONLY strict JSON matching this shape — no surrounding text, no code fen
 overviewMarkdown must cover: Purpose of the feature, Main components, High-level flow, Constraints and assumptions, Current state of the code.
 designMarkdown must cover: Architecture and layers, Data model / schema, APIs / interfaces, Key design decisions.`;
 
+/**
+ * Corrective follow-up sent to the bootstrap scan agent when its prior turn didn't contain the
+ * required JSON envelope (e.g. it ended on narration or a tool call instead). Appended to the
+ * same conversation rather than restarting the scan from scratch.
+ */
+export const BOOTSTRAP_SCAN_JSON_RETRY_NUDGE = `Your previous reply did not contain the required JSON. Do not explore further or call any more tools — answer now with ONLY strict JSON matching this shape, no surrounding text, no code fences:
+{"overviewMarkdown": "...", "designMarkdown": "..."}`;
+
 // ---------------------------------------------------------------------------
 // Start — match an existing feature before allocating a new one
 // ---------------------------------------------------------------------------

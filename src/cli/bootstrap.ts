@@ -7,7 +7,7 @@ import {
   getModelForStep,
 } from "../config.js";
 import { Agent } from "@mastra/core/agent";
-import { printInfo, printSuccess, printError, printWarn, writeFile, extractText, extractJson } from "./helpers.js";
+import { printInfo, printSuccess, printError, printWarn, writeFile, extractText, extractJson, JsonExtractionError } from "./helpers.js";
 import {
   AUTO_GENERATED_HEADER,
   buildBootstrapOverviewPrompt,
@@ -15,6 +15,7 @@ import {
   buildBootstrapScanPrompt,
   buildBootstrapPlaceholderOverview,
   buildBootstrapPlaceholderDesign,
+  BOOTSTRAP_SCAN_JSON_RETRY_NUDGE,
 } from "../prompts.js";
 import { listCodeFiles } from "../tools/codebase.js";
 import { createBootstrapScanAgent } from "../agents/bootstrap-agent.js";
@@ -180,6 +181,21 @@ export interface GeneratedFeatureDocs {
 }
 
 /**
+ * Thrown by `generateFeatureDocsFromScan()` when the scan agent's response still isn't valid
+ * JSON after the one corrective retry — a distinct type so callers can report it as a clean,
+ * actionable CLI error instead of letting it fall through to a generic failure message.
+ */
+export class ScanJsonFailureError extends Error {
+  constructor(featureId: string, cause: JsonExtractionError) {
+    super(
+      `Bootstrap scan for feature '${featureId}' failed: the LLM did not return the expected JSON, even after a corrective retry. ${cause.message}`,
+      { cause },
+    );
+    this.name = "ScanJsonFailureError";
+  }
+}
+
+/**
  * Core of bootstrap's autonomous-scan mode, without any CLI printing — shared by
  * `runBootstrapFromScan` (below) and `lv start`'s inline feature bootstrap.
  */
@@ -212,9 +228,34 @@ export async function generateFeatureDocsFromScan(
     config.output_language,
   );
   const scanAgent = createBootstrapScanAgent(config.scan_extensions, config.scan_skip_dirs, config.output_language);
-  const result = await scanAgent.generate(prompt, { model, maxSteps: 18 });
+  const result = await scanAgent.generate(prompt, { model, maxSteps: 30 });
   const text = extractText(result);
-  const parsed = extractJson<{ overviewMarkdown: string; designMarkdown: string }>(text);
+
+  let parsed: { overviewMarkdown: string; designMarkdown: string };
+  try {
+    parsed = extractJson(text);
+  } catch (err) {
+    if (!(err instanceof JsonExtractionError)) throw err;
+
+    // Corrective retry: continue the same conversation (reusing whatever exploration the
+    // agent already did) with one explicit nudge to answer with JSON now, instead of
+    // re-running the scan from scratch.
+    const retryResult = await scanAgent.generate(
+      [
+        { role: "user", content: prompt },
+        ...(result.response?.messages ?? []),
+        { role: "user", content: BOOTSTRAP_SCAN_JSON_RETRY_NUDGE },
+      ],
+      { model, maxSteps: 5 },
+    );
+    const retryText = extractText(retryResult);
+    try {
+      parsed = extractJson(retryText);
+    } catch (retryErr) {
+      if (!(retryErr instanceof JsonExtractionError)) throw retryErr;
+      throw new ScanJsonFailureError(featureId, retryErr);
+    }
+  }
 
   fs.mkdirSync(featureDir, { recursive: true });
   writeFile(overviewPath, AUTO_GENERATED_HEADER + parsed.overviewMarkdown);
@@ -277,12 +318,20 @@ async function runBootstrapFromScan(
 
   printInfo(`Scanning codebase to ${alreadyExists ? "refine" : "generate"} docs for feature '${featureId}'...`);
 
-  const { overviewPath, designPath } = await generateFeatureDocsFromScan(
-    config,
-    repoRoot,
-    featureId,
-    hint,
-  );
+  let overviewPath: string;
+  let designPath: string;
+  try {
+    ({ overviewPath, designPath } = await generateFeatureDocsFromScan(
+      config,
+      repoRoot,
+      featureId,
+      hint,
+    ));
+  } catch (err) {
+    if (!(err instanceof ScanJsonFailureError)) throw err;
+    printError(err.message);
+    process.exit(1);
+  }
 
   const overviewMarkdown = fs.readFileSync(overviewPath, "utf-8");
   await syncNewFeatureToLark(

@@ -25,10 +25,3 @@ The system SHALL, when the corrective retry's response also does not contain a p
 #### Scenario: Error message includes what the model actually returned
 - **WHEN** the system reports the actionable error described above
 - **THEN** the error includes a snippet of the model's actual response text, so the engineer can tell what went wrong instead of seeing only a generic parse-error message
-
-### Requirement: Inline feature bootstrap shares the same recovery behavior
-The system SHALL apply the same corrective-retry and actionable-error behavior when `lv start` bootstraps a referenced feature inline via autonomous scanning, since it uses the same scan-generation path as `lv bootstrap`.
-
-#### Scenario: lv start's inline bootstrap hits a non-JSON scan response
-- **WHEN** `lv start` triggers inline feature bootstrap for a referenced feature with no existing `docs/features/<feature-id>/` directory, and the scan agent's response is not parseable JSON
-- **THEN** the same retry-then-actionable-error behavior applies as when running `lv bootstrap` directly
