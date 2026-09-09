@@ -1,6 +1,7 @@
 import fs from "fs";
 import { Agent } from "@mastra/core/agent";
 import path from "path";
+import { registerAgent } from "../mastra/index.js";
 import {
   loadConfig,
   getRepoRoot,
@@ -56,21 +57,21 @@ import {
 } from "../prompts.js";
 import { LV_VERSION, type Config, type State } from "../types.js";
 
-const featureMatchAgent = new Agent({
+const featureMatchAgent = registerAgent(new Agent({
   id: "lv-feature-match-agent",
   name: "LV Feature Match Agent",
   model: "openai/gpt-4o-mini",
   instructions:
     "You are an assistant that matches project changes to existing features. Follow the user's prompt exactly and return only strict JSON — no surrounding text.",
-});
+}));
 
-const featureSplitAgent = new Agent({
+const featureSplitAgent = registerAgent(new Agent({
   id: "lv-feature-split-agent",
   name: "LV Feature Split Agent",
   model: "openai/gpt-4o-mini",
   instructions:
     "You are an assistant that splits a project change into the distinct new features it introduces. Follow the user's prompt exactly and return only strict JSON — no surrounding text.",
-});
+}));
 
 /**
  * Suggests existing features the given change might belong to, so `lv start` can offer them

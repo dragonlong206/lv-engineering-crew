@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { buildCodebaseTools } from '../tools/codebase.js';
 import { BOOTSTRAP_AGENT_INSTRUCTIONS, buildOutputLanguageParagraph } from '../prompts.js';
+import { registerAgent } from '../mastra/index.js';
 
 export function createBootstrapScanAgent(
   extensions?: string[],
@@ -9,7 +10,7 @@ export function createBootstrapScanAgent(
 ): Agent {
   const { listFilesTool, readFileTool, searchCodeTool } = buildCodebaseTools(extensions, skipDirs);
 
-  return new Agent({
+  return registerAgent(new Agent({
     id: 'lv-bootstrap-scan-agent',
     name: 'LV Bootstrap Scan Agent',
     description: 'Explores the codebase to finalize a feature\'s overview and design docs',
@@ -20,5 +21,5 @@ export function createBootstrapScanAgent(
       readFile: readFileTool,
       searchCode: searchCodeTool,
     },
-  });
+  }));
 }

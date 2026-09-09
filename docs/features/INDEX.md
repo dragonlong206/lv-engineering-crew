@@ -10,3 +10,4 @@
 | [lv-status](./lv-status/overview.md) | status: print current ticket state |
 | [lv-init](./lv-init/overview.md) | init: split requirement documents into features, allocate Fxxxx IDs |
 | [lv-resume](./lv-resume/overview.md) | resume: continue the workflow, or ask for approval if waiting on the engineer |
+- [devops](./devops/overview.md)

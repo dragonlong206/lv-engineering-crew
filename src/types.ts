@@ -78,11 +78,19 @@ export const ModelsConfigSchema = z.object({
 });
 export type ModelsConfig = z.infer<typeof ModelsConfigSchema>;
 
+// Whether Mastra agent runs are traced (observability wired to the shared `mastra` instance
+// in src/mastra.ts). Defaults to enabled — see isTracingEnabled() in src/config.ts.
+export const TracingConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+});
+export type TracingConfig = z.infer<typeof TracingConfigSchema>;
+
 export const ConfigSchema = z.object({
   lark: LarkConfigSchema,
   default_branch: z.string().default("main"),
   model: z.string().default("openai/gpt-4o"),
   models: ModelsConfigSchema.optional(),
+  tracing: TracingConfigSchema.optional(),
   feature_id_prefix: z.string().default("F"),
   feature_id_digits: z.number().int().positive().default(4),
   // Branch naming per type, e.g. { feature: "lv/{ticket_id}", hotfix: "hotfix/{ticket_id}" }.
