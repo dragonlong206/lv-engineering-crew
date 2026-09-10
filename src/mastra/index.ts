@@ -31,8 +31,8 @@ export const mastra = new Mastra({
  * Registers an agent with the shared `mastra` instance so its runs participate in its
  * observability, returning the same instance for immediate use. Falls back to the
  * already-registered agent under `agent.id` if called again with that id in this process
- * (`addAgent` throws on a duplicate key) — `createBootstrapScanAgent()` builds a fresh `Agent`
- * per call, so this keeps repeat calls within one process safe.
+ * (`addAgent` throws on a duplicate key), so a factory that builds a fresh `Agent` per call
+ * stays safe to call more than once within one process.
  */
 export function registerAgent<T extends Agent>(agent: T): T {
   try {

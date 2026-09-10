@@ -1,13 +1,7 @@
-# output-language Specification
-
-## Purpose
-
-Makes the `lv-bootstrap` skill/command's own generated prose — `overview.md`/`design.md` content written directly by the calling coding agent, outside any OpenSpec workflow — honor the same repo-configured output language as OpenSpec-driven generation, so the "all LLMs" guarantee holds regardless of which code path produced the text.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Bootstrap agents honor the configured output language
-The system SHALL instruct the `lv-bootstrap` skill/command — covering both explicit-paths input and autonomous codebase exploration — to write generated `overview.md`/`design.md` prose in the repo's configured output language, when one is set.
+The system SHALL instruct the `lv-bootstrap` Claude Code skill/command — covering both explicit-paths input and autonomous codebase exploration — to write generated `overview.md`/`design.md` prose in the repo's configured output language, when one is set.
 
 #### Scenario: Bootstrapping with an output language configured
 - **WHEN** an engineer invokes the `lv-bootstrap` skill/command in a repo with an output language configured

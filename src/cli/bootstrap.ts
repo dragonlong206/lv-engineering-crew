@@ -1,63 +1,23 @@
 import fs from "fs";
 import path from "path";
-import {
-  loadConfig,
-  getRepoRoot,
-  getFeaturesDir,
-  getModelForStep,
-} from "../config.js";
-import { Agent } from "@mastra/core/agent";
-import { registerAgent } from "../mastra/index.js";
-import {
-  printInfo,
-  printSuccess,
-  printError,
-  printWarn,
-  writeFile,
-  extractText,
-  extractJson,
-  JsonExtractionError,
-} from "./helpers.js";
+import { loadConfig, getRepoRoot, getFeaturesDir } from "../config.js";
+import { printInfo, printSuccess, printError, printWarn, writeFile } from "./helpers.js";
 import {
   AUTO_GENERATED_HEADER,
-  buildBootstrapOverviewPrompt,
-  buildBootstrapDesignPrompt,
-  buildBootstrapScanPrompt,
   buildBootstrapPlaceholderOverview,
   buildBootstrapPlaceholderDesign,
-  BOOTSTRAP_SCAN_JSON_RETRY_NUDGE,
 } from "../prompts.js";
-import { listCodeFiles } from "../tools/codebase.js";
-import { createBootstrapScanAgent } from "../agents/bootstrap-agent.js";
+import {
+  listCodeFiles,
+  DEFAULT_CODE_EXTENSIONS,
+  DEFAULT_SKIP_DIRS,
+} from "../tools/codebase.js";
 import { getTenantAccessToken, syncFeatureToLarkTable } from "../tools/lark.js";
 import type { Config } from "../types.js";
-
-const bootstrapAgent = registerAgent(
-  new Agent({
-    id: "lv-bootstrap-agent",
-    name: "LV Bootstrap Agent",
-    model: "openai/gpt-4o-mini",
-    instructions:
-      "You are a documentation generation assistant. Follow the user's prompt exactly and return only the requested content.",
-  }),
-);
 
 export interface BootstrapScanHint {
   name?: string;
   description?: string;
-  uiDesignRefs?: string[];
-}
-
-/** First non-empty, non-comment line of generated overview.md, for a short human-readable title. */
-function deriveFeatureTitle(
-  overviewMarkdown: string,
-  featureId: string,
-): string {
-  const line = overviewMarkdown
-    .split("\n")
-    .map((l) => l.trim())
-    .find((l) => l.length > 0 && !l.startsWith("<!--"));
-  return line ? line.replace(/^#+\s*/, "") : featureId;
 }
 
 /**
@@ -66,9 +26,9 @@ function deriveFeatureTitle(
  * unconditionally after (re)generating a feature's docs, regardless of whether its docs
  * directory already existed: `syncFeatureToLarkTable()` checks Lark itself for an existing
  * record, so this also backfills a feature whose docs predate `features_table_id` being
- * configured or whose Lark write previously failed. Called directly by `lv bootstrap`;
- * `lv start`'s inline bootstrap instead calls `syncFeatureToLarkTable()` itself, since it
- * already holds a token from its own run.
+ * configured or whose Lark write previously failed. Called directly by `lv bootstrap`'s
+ * placeholder and `--finalize` modes; `lv start`'s inline bootstrap instead calls
+ * `syncFeatureToLarkTable()` itself, since it already holds a token from its own run.
  */
 async function syncNewFeatureToLark(
   config: Config,
@@ -92,6 +52,9 @@ async function syncNewFeatureToLark(
 
 export interface BootstrapOpts {
   newFeature?: boolean;
+  context?: boolean;
+  finalize?: boolean;
+  title?: string;
 }
 
 export async function runBootstrap(
@@ -110,34 +73,52 @@ export async function runBootstrap(
       );
     }
     await runBootstrapPlaceholder(config, repoRoot, featureId);
-  } else if (pathsArg) {
-    if (hint?.name || hint?.description) {
-      printWarn("--name/--description are ignored when --paths is provided.");
-    }
-    await runBootstrapFromPaths(config, repoRoot, featureId, pathsArg);
-  } else {
-    await runBootstrapFromScan(config, repoRoot, featureId, hint);
+    return;
   }
+
+  if (opts?.context) {
+    runBootstrapContext(config, repoRoot, featureId, pathsArg, hint);
+    return;
+  }
+
+  if (opts?.finalize) {
+    if (!opts.title) {
+      printError("--finalize requires --title <title>.");
+      process.exit(1);
+    }
+    await runBootstrapFinalize(config, repoRoot, featureId, opts.title);
+    return;
+  }
+
+  printError(
+    `'lv bootstrap ${featureId}' with no flags no longer generates docs directly. Run the 'lv-bootstrap' skill/command from your coding agent (Claude Code, Cursor, etc.) instead, or use 'lv bootstrap ${featureId} --new-feature' for placeholder-only docs.`,
+  );
+  process.exit(1);
 }
 
-async function runBootstrapFromPaths(
-  config: Config,
+/**
+ * Expands `--paths` into a capped list of repo-relative file paths (recursing into any given
+ * directory, same 50-file-per-directory cap as before) — file *contents* are deliberately not
+ * read here; the calling coding agent reads whichever of these paths it needs with its own
+ * tools. See design.md Decision 1/2.
+ */
+function expandBootstrapPaths(
   repoRoot: string,
-  featureId: string,
   pathsArg: string,
-): Promise<void> {
-  const paths = pathsArg
+  scanExtensions: string[],
+  scanSkipDirs: string[],
+): string[] {
+  const rawPaths = pathsArg
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean);
-  if (paths.length === 0) {
+  if (rawPaths.length === 0) {
     printError("No paths provided. Use --paths <path1,path2,...>");
     process.exit(1);
   }
 
-  // Read code from all specified paths
-  const codeContext: string[] = [];
-  for (const rawPath of paths) {
+  const resolved: string[] = [];
+  for (const rawPath of rawPaths) {
     const absPath = path.isAbsolute(rawPath)
       ? rawPath
       : path.join(repoRoot, rawPath);
@@ -148,168 +129,115 @@ async function runBootstrapFromPaths(
 
     const stat = fs.statSync(absPath);
     if (stat.isDirectory()) {
-      const files = listCodeFiles(
-        absPath,
-        config.scan_extensions,
-        config.scan_skip_dirs,
-      ).slice(0, 50); // limit
-      for (const file of files) {
-        const rel = path.relative(repoRoot, file);
-        const content = fs.readFileSync(file, "utf-8");
-        codeContext.push(`### ${rel}\n\`\`\`\n${content}\n\`\`\``);
-      }
+      const files = listCodeFiles(absPath, scanExtensions, scanSkipDirs).slice(
+        0,
+        50,
+      ); // limit
+      resolved.push(...files.map((f) => path.relative(repoRoot, f)));
     } else {
-      const rel = path.relative(repoRoot, absPath);
-      const content = fs.readFileSync(absPath, "utf-8");
-      codeContext.push(`### ${rel}\n\`\`\`\n${content}\n\`\`\``);
+      resolved.push(path.relative(repoRoot, absPath));
     }
   }
 
-  const codeBlock = codeContext.join("\n\n");
+  return resolved;
+}
 
-  printInfo(`Generating docs for feature '${featureId}'...`);
+interface BootstrapContextOutput {
+  repoRoot: string;
+  overviewPath: string;
+  designPath: string;
+  scanExtensions: string[];
+  scanSkipDirs: string[];
+  outputLanguage?: string;
+  existingOverviewMarkdown?: string;
+  existingDesignMarkdown?: string;
+  paths?: string[];
+  name?: string;
+  description?: string;
+}
 
-  const model = getModelForStep(config, "bootstrap");
-
-  const [overviewResult, designResult] = await Promise.all([
-    bootstrapAgent.generate(
-      buildBootstrapOverviewPrompt(
-        featureId,
-        codeBlock,
-        config.output_language,
-      ),
-      { model },
-    ),
-    bootstrapAgent.generate(
-      buildBootstrapDesignPrompt(featureId, codeBlock, config.output_language),
-      { model },
-    ),
-  ]);
-
-  const overviewText = extractText(overviewResult);
-  const designText = extractText(designResult);
-
+/**
+ * `--context`: no LLM call. Assembles the same inputs the old Mastra-agent prompts used to
+ * package (repo root, existing drafts, scan config, `--paths` expansion, feature hint) and
+ * prints them as JSON for the `lv-bootstrap` skill/command to consume — see design.md Decision
+ * 1/2. Creates the feature directory so the skill can write into it immediately afterward.
+ */
+function runBootstrapContext(
+  config: Config,
+  repoRoot: string,
+  featureId: string,
+  pathsArg?: string,
+  hint?: BootstrapScanHint,
+): void {
   const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
   fs.mkdirSync(featureDir, { recursive: true });
 
-  writeFile(
-    path.join(featureDir, "overview.md"),
-    AUTO_GENERATED_HEADER + overviewText,
-  );
-  writeFile(
-    path.join(featureDir, "design.md"),
-    AUTO_GENERATED_HEADER + designText,
-  );
+  const overviewPath = path.join(featureDir, "overview.md");
+  const designPath = path.join(featureDir, "design.md");
+
+  const existingOverviewMarkdown = fs.existsSync(overviewPath)
+    ? fs.readFileSync(overviewPath, "utf-8")
+    : undefined;
+  const existingDesignMarkdown = fs.existsSync(designPath)
+    ? fs.readFileSync(designPath, "utf-8")
+    : undefined;
+
+  const scanExtensions = config.scan_extensions ?? DEFAULT_CODE_EXTENSIONS;
+  const scanSkipDirs = config.scan_skip_dirs ?? DEFAULT_SKIP_DIRS;
+
+  const paths = pathsArg
+    ? expandBootstrapPaths(repoRoot, pathsArg, scanExtensions, scanSkipDirs)
+    : undefined;
+
+  const output: BootstrapContextOutput = {
+    repoRoot,
+    overviewPath,
+    designPath,
+    scanExtensions,
+    scanSkipDirs,
+    outputLanguage: config.output_language,
+    existingOverviewMarkdown,
+    existingDesignMarkdown,
+    paths,
+    name: hint?.name,
+    description: hint?.description,
+  };
+
+  console.log(JSON.stringify(output));
+}
+
+/**
+ * `--finalize`: no LLM call. Runs the same post-generation bookkeeping the old LLM-driven modes
+ * used to bundle in (index update, optional Lark sync) once the `lv-bootstrap` skill/command has
+ * already written `overview.md`/`design.md` itself — see design.md Decision 1/2.
+ */
+async function runBootstrapFinalize(
+  config: Config,
+  repoRoot: string,
+  featureId: string,
+  title: string,
+): Promise<void> {
+  const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
+  const overviewPath = path.join(featureDir, "overview.md");
+  const designPath = path.join(featureDir, "design.md");
+
+  if (!fs.existsSync(overviewPath) || !fs.existsSync(designPath)) {
+    printError(
+      `--finalize expects '${overviewPath}' and '${designPath}' to already exist — write them first, then run --finalize.`,
+    );
+    process.exit(1);
+  }
 
   updateIndex(repoRoot, featureId);
+  await syncNewFeatureToLark(config, featureId, title);
 
-  await syncNewFeatureToLark(
-    config,
-    featureId,
-    deriveFeatureTitle(overviewText, featureId),
-  );
-
-  printSuccess(`Generated docs for '${featureId}'.`);
-  console.log(`\nFiles written (not committed):`);
-  console.log(`  ${path.join(featureDir, "overview.md")}`);
-  console.log(`  ${path.join(featureDir, "design.md")}`);
-  console.log(`\nReview, edit, then commit manually.`);
+  printSuccess(`Finalized docs for '${featureId}'.`);
 }
 
 export interface GeneratedFeatureDocs {
   featureDir: string;
   overviewPath: string;
   designPath: string;
-}
-
-/**
- * Thrown by `generateFeatureDocsFromScan()` when the scan agent's response still isn't valid
- * JSON after the one corrective retry — a distinct type so callers can report it as a clean,
- * actionable CLI error instead of letting it fall through to a generic failure message.
- */
-export class ScanJsonFailureError extends Error {
-  constructor(featureId: string, cause: JsonExtractionError) {
-    super(
-      `Bootstrap scan for feature '${featureId}' failed: the LLM did not return the expected JSON, even after a corrective retry. ${cause.message}`,
-      { cause },
-    );
-    this.name = "ScanJsonFailureError";
-  }
-}
-
-/**
- * Core of bootstrap's autonomous-scan mode, without any CLI printing — shared by
- * `runBootstrapFromScan` (below) and `lv start`'s inline feature bootstrap.
- */
-export async function generateFeatureDocsFromScan(
-  config: Config,
-  repoRoot: string,
-  featureId: string,
-  hint?: BootstrapScanHint,
-): Promise<GeneratedFeatureDocs> {
-  const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
-  const overviewPath = path.join(featureDir, "overview.md");
-  const designPath = path.join(featureDir, "design.md");
-
-  const existingOverview = fs.existsSync(overviewPath)
-    ? fs.readFileSync(overviewPath, "utf-8")
-    : undefined;
-  const existingDesign = fs.existsSync(designPath)
-    ? fs.readFileSync(designPath, "utf-8")
-    : undefined;
-
-  const model = getModelForStep(config, "bootstrap");
-  const prompt = buildBootstrapScanPrompt(
-    featureId,
-    repoRoot,
-    existingOverview,
-    existingDesign,
-    hint?.name,
-    hint?.description,
-    hint?.uiDesignRefs,
-    config.output_language,
-  );
-  const scanAgent = createBootstrapScanAgent(
-    config.scan_extensions,
-    config.scan_skip_dirs,
-    config.output_language,
-  );
-  const result = await scanAgent.generate(prompt, { model, maxSteps: 30 });
-  const text = extractText(result);
-
-  let parsed: { overviewMarkdown: string; designMarkdown: string };
-  try {
-    parsed = extractJson(text);
-  } catch (err) {
-    if (!(err instanceof JsonExtractionError)) throw err;
-
-    // Corrective retry: continue the same conversation (reusing whatever exploration the
-    // agent already did) with one explicit nudge to answer with JSON now, instead of
-    // re-running the scan from scratch.
-    const retryResult = await scanAgent.generate(
-      [
-        { role: "user", content: prompt },
-        ...(result.response?.messages ?? []),
-        { role: "user", content: BOOTSTRAP_SCAN_JSON_RETRY_NUDGE },
-      ],
-      { model, maxSteps: 5 },
-    );
-    const retryText = extractText(retryResult);
-    try {
-      parsed = extractJson(retryText);
-    } catch (retryErr) {
-      if (!(retryErr instanceof JsonExtractionError)) throw retryErr;
-      throw new ScanJsonFailureError(featureId, retryErr);
-    }
-  }
-
-  fs.mkdirSync(featureDir, { recursive: true });
-  writeFile(overviewPath, AUTO_GENERATED_HEADER + parsed.overviewMarkdown);
-  writeFile(designPath, AUTO_GENERATED_HEADER + parsed.designMarkdown);
-
-  updateIndex(repoRoot, featureId);
-
-  return { featureDir, overviewPath, designPath };
 }
 
 /**
@@ -356,48 +284,6 @@ async function runBootstrapPlaceholder(
   await syncNewFeatureToLark(config, featureId, featureId);
 
   printSuccess(`Wrote placeholder docs for '${featureId}'.`);
-  console.log(`\nFiles written (not committed):`);
-  console.log(`  ${overviewPath}`);
-  console.log(`  ${designPath}`);
-  console.log(`\nReview, edit, then commit manually.`);
-}
-
-async function runBootstrapFromScan(
-  config: Config,
-  repoRoot: string,
-  featureId: string,
-  hint?: BootstrapScanHint,
-): Promise<void> {
-  const featureDir = path.join(getFeaturesDir(repoRoot), featureId);
-  const alreadyExists = fs.existsSync(path.join(featureDir, "overview.md"));
-
-  printInfo(
-    `Scanning codebase to ${alreadyExists ? "refine" : "generate"} docs for feature '${featureId}'...`,
-  );
-
-  let overviewPath: string;
-  let designPath: string;
-  try {
-    ({ overviewPath, designPath } = await generateFeatureDocsFromScan(
-      config,
-      repoRoot,
-      featureId,
-      hint,
-    ));
-  } catch (err) {
-    if (!(err instanceof ScanJsonFailureError)) throw err;
-    printError(err.message);
-    process.exit(1);
-  }
-
-  const overviewMarkdown = fs.readFileSync(overviewPath, "utf-8");
-  await syncNewFeatureToLark(
-    config,
-    featureId,
-    hint?.name ?? deriveFeatureTitle(overviewMarkdown, featureId),
-  );
-
-  printSuccess(`Generated docs for '${featureId}' from codebase scan.`);
   console.log(`\nFiles written (not committed):`);
   console.log(`  ${overviewPath}`);
   console.log(`  ${designPath}`);

@@ -1,13 +1,7 @@
-# lark-feature-table-sync Specification
-
-## Purpose
-
-Registers every newly created feature in a dedicated Lark Base Features table, so stakeholders in Lark can see which features exist without manual data entry. The Features table is separate from the ticket/task table and carries no reference back to a ticket.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Docs generation creates a Lark Features table record when one is missing
-The system SHALL create a record in the configured Lark Base Features table for a feature ID whenever docs generation runs for it — via the `lv-bootstrap` skill/command or `lv start`'s inline bootstrap — and that feature ID has no existing record in the table yet, regardless of whether its `docs/features/<feature-id>/` directory already existed locally. Existence is determined by checking the Features table itself, not by local docs-directory presence, so a feature whose docs were generated before the sync was configured (or whose prior sync attempt failed) is backfilled on a later run instead of being skipped forever.
+The system SHALL create a record in the configured Lark Base Features table for a feature ID whenever docs generation runs for it — via the `lv-bootstrap` Claude Code skill/command or `lv start`'s inline bootstrap — and that feature ID has no existing record in the table yet, regardless of whether its `docs/features/<feature-id>/` directory already existed locally. Existence is determined by checking the Features table itself, not by local docs-directory presence, so a feature whose docs were generated before the sync was configured (or whose prior sync attempt failed) is backfilled on a later run instead of being skipped forever.
 
 #### Scenario: lv bootstrap creates docs for a brand-new feature ID
 - **WHEN** the `lv-bootstrap` skill/command generates docs for a feature ID with no existing `docs/features/<feature-id>/` directory and no existing Features table record
@@ -53,14 +47,3 @@ The system SHALL, when a feature is created via `lv start` for a ticket whose Pr
 #### Scenario: Feature created via lv bootstrap with no ticket context
 - **WHEN** a new feature is created by invoking the `lv-bootstrap` skill/command directly, outside of any `lv start` run
 - **THEN** the created Features table record's Project field is left unset, since there is no ticket to read a Project link from
-
-### Requirement: Sync is configurable and best-effort
-The system SHALL provide a configuration setting controlling whether new features are synced to the Lark Features table, and SHALL NOT fail the invoking command if the sync fails.
-
-#### Scenario: Sync disabled via configuration
-- **WHEN** the Features table sync setting is explicitly disabled
-- **THEN** the system does not attempt to create a Features table record for any newly created feature
-
-#### Scenario: Lark write fails
-- **WHEN** creating the Features table record fails, for example due to insufficient permission scope or a network error
-- **THEN** the invoking command reports the failure but completes as if sync were disabled
