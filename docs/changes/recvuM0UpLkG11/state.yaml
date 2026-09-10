@@ -9,4 +9,5 @@ feature_ids:
 branch: feature/recvuM0UpLkG11-make-lv-bootstrap-a-skill-like-openspec
 created_at: '2026-09-10T00:45:11.456Z'
 lv_version: 0.1.0
-openspec_changes: []
+openspec_changes:
+  - make-lv-bootstrap-a-skill-like-openspec

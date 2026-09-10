@@ -4,7 +4,7 @@ import yaml from "js-yaml";
 import { execa } from "execa";
 import which from "which";
 import { getRepoRoot } from "../config.js";
-import { printInfo, printSuccess, printError, confirm } from "./helpers.js";
+import { printInfo, printSuccess, printError, confirm, writeFile } from "./helpers.js";
 import {
   CONTEXT_POINTER_LINES,
   ARCHIVE_GUIDANCE,
@@ -12,6 +12,9 @@ import {
   PROPOSE_LINK_CHANGE_LINE,
   PROPOSE_UI_DESIGN_LINE,
   PROPOSE_ATTACHMENT_LINE,
+  buildLvBootstrapSkillFile,
+  buildLvBootstrapClaudeCommandFile,
+  buildLvBootstrapCursorCommandFile,
 } from "../prompts.js";
 
 export interface InitOptions {
@@ -84,6 +87,7 @@ export async function runInit(opts: InitOptions): Promise<void> {
   addProposeLinkInstruction(repoRoot);
   addProposeUiDesignInstruction(repoRoot);
   addProposeAttachmentInstruction(repoRoot);
+  installLvBootstrapSkill(repoRoot);
 
   printSuccess("OpenSpec installed and wired to LV context.");
   console.log(`\nNext: run 'lv start <ticket-id>' or 'lv start --description "..."' to begin a change.`);
@@ -355,5 +359,88 @@ function addProposeLinkInstruction(repoRoot: string): void {
     const insertion = `\n\n${indent}${PROPOSE_LINK_CHANGE_LINE}`;
     const patched = raw.slice(0, insertAt) + insertion + raw.slice(insertAt);
     fs.writeFileSync(filePath, patched, "utf-8");
+  }
+}
+
+// Relative path OpenSpec writes a tool's own generated SKILL.md at, under that tool's base
+// directory — universal across every tool `openspec init` supports (verified across seven
+// tools, including wildly different ones like Gemini/Cline/Devin — see design.md's Context
+// section), so this one relative path detects any tool OpenSpec installed, present or future,
+// with no tool names hardcoded here.
+const OPENSPEC_SKILL_MARKER_RELATIVE_PATH = path.join(
+  "skills",
+  "openspec-propose",
+  "SKILL.md",
+);
+
+/**
+ * Finds every coding-agent base directory `openspec init` installed a skill into for this repo.
+ * OpenSpec always writes a tool's directory directly at the target repo root (never nested), so
+ * checking each of the repo root's own subdirectories for `OPENSPEC_SKILL_MARKER_RELATIVE_PATH`
+ * is enough — no recursive search of the whole tree, and no list of tool names to maintain. See
+ * design.md Decision 3.
+ */
+function findOpenSpecToolBaseDirs(repoRoot: string): string[] {
+  const found: string[] = [];
+  for (const entry of fs.readdirSync(repoRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const marker = path.join(
+      repoRoot,
+      entry.name,
+      OPENSPEC_SKILL_MARKER_RELATIVE_PATH,
+    );
+    if (fs.existsSync(marker)) found.push(entry.name);
+  }
+  return found;
+}
+
+interface LvBootstrapCommandShape {
+  relativeCommandPath: string;
+  build: () => string;
+}
+
+// The small, explicit set of coding-agent command-file formats `lv` knows how to author —
+// deliberately not the same list as the tools the skill itself supports (that list is dynamic,
+// see `findOpenSpecToolBaseDirs()`). A tool's base-dir name not listed here still gets the
+// skill via `installLvBootstrapSkill()`, just no command file — the same way Codex already
+// works with OpenSpec's own commands. Add a new entry here (not new detection logic) to support
+// another tool's command shape later — see design.md Decision 3/4.
+const LV_BOOTSTRAP_KNOWN_COMMAND_SHAPES: Record<string, LvBootstrapCommandShape> = {
+  ".claude": {
+    relativeCommandPath: path.join("commands", "lv", "bootstrap.md"),
+    build: buildLvBootstrapClaudeCommandFile,
+  },
+  ".cursor": {
+    relativeCommandPath: path.join("commands", "lv-bootstrap.md"),
+    build: buildLvBootstrapCursorCommandFile,
+  },
+};
+
+/**
+ * Idempotently installs the `lv-bootstrap` skill — and, for a known command shape, a matching
+ * slash command — into every coding-agent directory `openspec init` just installed a skill into,
+ * detected dynamically via `findOpenSpecToolBaseDirs()` rather than a fixed list of tool names.
+ * See design.md Decision 3/4 and the `lv-init/lv-bootstrap-skill-install` spec.
+ */
+function installLvBootstrapSkill(repoRoot: string): void {
+  for (const toolDir of findOpenSpecToolBaseDirs(repoRoot)) {
+    const skillPath = path.join(
+      repoRoot,
+      toolDir,
+      "skills",
+      "lv-bootstrap",
+      "SKILL.md",
+    );
+    writeFile(skillPath, buildLvBootstrapSkillFile());
+
+    const knownShape = LV_BOOTSTRAP_KNOWN_COMMAND_SHAPES[toolDir];
+    if (!knownShape) continue;
+
+    const commandPath = path.join(
+      repoRoot,
+      toolDir,
+      knownShape.relativeCommandPath,
+    );
+    writeFile(commandPath, knownShape.build());
   }
 }

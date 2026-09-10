@@ -9,59 +9,6 @@ export const AUTO_GENERATED_HEADER = `<!-- AUTO-GENERATED — not yet verified. 
 `;
 
 // ---------------------------------------------------------------------------
-// Bootstrap
-// ---------------------------------------------------------------------------
-
-// Appended as its own paragraph (not interleaved into the "should cover" bullet lists) when a
-// repo has `output_language` configured, so the instruction stays easy to grep/verify in
-// isolation. Scoped to descriptive prose — code blocks/identifiers/paths/commands stay as-is.
-export function buildOutputLanguageParagraph(outputLanguage?: string): string {
-  if (!outputLanguage) return "";
-  return `\n\nWrite all descriptive prose in ${outputLanguage}. Leave code blocks, identifiers, file paths, and command names untranslated; headings may stay in English.`;
-}
-
-export function buildBootstrapOverviewPrompt(
-  featureId: string,
-  codeBlock: string,
-  outputLanguage?: string,
-): string {
-  return `You are a systems analyst. Read the following code and generate an overview.md document for the feature '${featureId}'.
-
-overview.md should cover:
-- Purpose of the feature
-- Main components
-- High-level flow
-- Constraints and assumptions
-- Current state of the code
-
-Be concise. Return only the Markdown content — no surrounding text.${buildOutputLanguageParagraph(outputLanguage)}
-
-## Code
-
-${codeBlock}`;
-}
-
-export function buildBootstrapDesignPrompt(
-  featureId: string,
-  codeBlock: string,
-  outputLanguage?: string,
-): string {
-  return `You are a systems designer. Read the following code and generate a design.md document for the feature '${featureId}'.
-
-design.md should cover:
-- Architecture and layers
-- Data model / schema
-- APIs / interfaces
-- Key design decisions
-
-Be concise. Return only the Markdown content — no surrounding text.${buildOutputLanguageParagraph(outputLanguage)}
-
-## Code
-
-${codeBlock}`;
-}
-
-// ---------------------------------------------------------------------------
 // Bootstrap — new-feature placeholder mode (no scan, no LLM call)
 // ---------------------------------------------------------------------------
 
@@ -112,34 +59,116 @@ export function buildBootstrapPlaceholderDesign(featureId: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Bootstrap — autonomous codebase scan mode (no --paths)
+// Bootstrap — lv-bootstrap skill/command body (shared across every coding agent
+// it is installed for; see openspec/changes/make-lv-bootstrap-a-skill-like-openspec)
 // ---------------------------------------------------------------------------
 
-export const BOOTSTRAP_AGENT_INSTRUCTIONS = `You are a senior engineer documenting a feature by exploring an actual codebase. You have tools to list files, read files, and search code — use them to ground everything you write in what is really in the repository. Do not invent components, APIs, or behavior you have not verified by reading the code.
+// The literal auto-generated header text, inlined here (rather than imported) so the skill body
+// stays a single self-contained constant an engineer can read start to finish without chasing
+// another export — `AUTO_GENERATED_HEADER` itself stays the source of truth for placeholder mode.
+const LV_BOOTSTRAP_SKILL_HEADER_LITERAL = AUTO_GENERATED_HEADER.trim();
 
-You may be given an existing draft overview.md (and design.md). "Refine" does NOT mean copy the draft forward with light rewording — it means: keep sections whose claims you've verified are still true (e.g. purpose/scope/constraints that aren't about code), and rewrite any section whose factual claims are about the code (function signatures, CLI flags/options, file names, module names, architecture) purely from what you observe in your exploration this run. Never trust the draft for a code fact — verify it, and if you didn't check it, don't assert it. A draft that's gone stale (renamed functions, new options, new files) is the normal case, not the exception — assume it may be wrong until you've confirmed otherwise.
+export const LV_BOOTSTRAP_SKILL_BODY = `Generate or refine a feature's \`overview.md\`/\`design.md\` by exploring this repository's actual code — grounded in what you read yourself, not a separate LLM call.
 
-You may instead (or additionally) be given a short feature name/description hint. Use it to seed your search — treat it as a starting hypothesis about what the feature is and where to look, not as text to copy verbatim into the output. If neither a draft nor a hint is given, generate both documents purely from what you find in the code.
+## 1. Get context
 
-If the feature is a CLI command, tool, or public API, use searchCode to find where it's registered/exposed (e.g. the command-registration file) so you capture its current full set of flags/parameters, not just what one implementation file suggests.
+Run (no LLM call, just prints JSON):
 
-Be economical: use listFiles/searchCode to narrow down to the handful of files that actually matter, then readFile only those — but do not skip re-reading a file just because the draft already describes it; the draft is what you're trying to correct. Aim to finish exploring within about 10 tool calls and always produce a final JSON answer — never end your turn on a tool call.
+\`\`\`bash
+lv bootstrap <feature-id> --context [--paths <comma-separated-paths>] [--name <hint>] [--description <hint>]
+\`\`\`
 
-Be concise. Do not use em-dashes for parenthetical remarks.
+This prints one JSON object with: \`repoRoot\`, \`overviewPath\`, \`designPath\`, \`scanExtensions\`, \`scanSkipDirs\`, \`outputLanguage\` (omitted when unset), \`existingOverviewMarkdown\`/\`existingDesignMarkdown\` (omitted when no draft exists yet), \`paths\` (only present when \`--paths\` was given — already expanded from any directory into a capped file list), and \`name\`/\`description\` (only present when given as hints). It also creates the feature directory so you can write into it right away. This command never reads file *contents* for you — only resolves *which* files are relevant when \`--paths\` narrows the scope.
 
-Return ONLY strict JSON matching this shape — no surrounding text, no code fences:
-{"overviewMarkdown": "...", "designMarkdown": "..."}
+## 2. Explore
 
-overviewMarkdown must cover: Purpose of the feature, Main components, High-level flow, Constraints and assumptions, Current state of the code.
-designMarkdown must cover: Architecture and layers, Data model / schema, APIs / interfaces, Key design decisions.`;
+- If \`paths\` is present in the context JSON: read only those files with your own tools. Do not explore the rest of the repository.
+- If \`paths\` is absent: explore the repository yourself (list/glob/grep/read) to find the code relevant to \`<feature-id>\`. Use \`name\`/\`description\`, if present, as a starting hypothesis for where to look, not as text to copy into the output. If the feature is a CLI command, tool, or public API, search for where it's registered/exposed so you capture its current full set of flags/parameters, not just what one implementation file suggests.
+- Be economical: narrow down to the handful of files that actually matter, then read only those.
+
+## 3. Refine an existing draft, don't just restate it
+
+If \`existingOverviewMarkdown\`/\`existingDesignMarkdown\` is present, treat it as a draft to verify and refine — not to copy forward with light rewording. Keep sections whose claims you've verified are still true (e.g. purpose/scope/constraints that aren't about code), and rewrite any section whose factual claims are about the code (function signatures, CLI flags/options, file names, module names, architecture) purely from what you observe in this run's own exploration. Never trust the draft for a code fact — verify it, and if you didn't check it, don't assert it. A draft that's gone stale (renamed functions, new options, new files) is the normal case, not the exception.
+
+## 4. Write the docs
+
+Write \`overviewPath\` and \`designPath\` (from the context JSON) directly with your own file-writing tool. Prepend this exact header to both files, followed by a blank line, before the content:
+
+\`\`\`
+${LV_BOOTSTRAP_SKILL_HEADER_LITERAL}
+\`\`\`
+
+\`overview.md\` must cover: Purpose of the feature, Main components, High-level flow, Constraints and assumptions, Current state of the code.
+\`design.md\` must cover: Architecture and layers, Data model / schema, APIs / interfaces, Key design decisions.
+
+Be concise. Do not use em-dashes for parenthetical remarks. If \`outputLanguage\` is present in the context JSON, write all descriptive prose in that language — leave code blocks, identifiers, file paths, and command names untranslated; headings may stay in English.
+
+## 5. Finalize
+
+Once both files are written, run (no LLM call):
+
+\`\`\`bash
+lv bootstrap <feature-id> --finalize --title "<short human-readable title derived from the overview you just wrote>"
+\`\`\`
+
+This updates \`docs/features/INDEX.md\` and syncs the feature to Lark when that's configured — you don't need to do either yourself.`;
+
+// Shared one-line description used by every tool's SKILL.md/command frontmatter — a single
+// constant so the wording never drifts between the skill and any known-shape command file.
+const LV_BOOTSTRAP_SKILL_DESCRIPTION =
+  "Generate or refine a feature's overview.md/design.md by exploring the repo directly, without a separate LLM call. Use when creating or refreshing docs/features/<feature-id>/{overview.md,design.md}.";
 
 /**
- * Corrective follow-up sent to the bootstrap scan agent when its prior turn didn't contain the
- * required JSON envelope (e.g. it ended on narration or a tool call instead). Appended to the
- * same conversation rather than restarting the scan from scratch.
+ * Renders the full `SKILL.md` content installed for every coding agent `lv init` detects
+ * (see `installLvBootstrapSkill()` in `src/cli/init.ts`) — frontmatter is identical across every
+ * tool (only the file's location differs), matching how OpenSpec's own `SKILL.md` body/frontmatter
+ * shape is universal across tools.
  */
-export const BOOTSTRAP_SCAN_JSON_RETRY_NUDGE = `Your previous reply did not contain the required JSON. Do not explore further or call any more tools — answer now with ONLY strict JSON matching this shape, no surrounding text, no code fences:
-{"overviewMarkdown": "...", "designMarkdown": "..."}`;
+export function buildLvBootstrapSkillFile(): string {
+  return `---
+name: lv-bootstrap
+description: ${LV_BOOTSTRAP_SKILL_DESCRIPTION}
+allowed-tools: Bash(lv bootstrap:*)
+metadata:
+  author: lv
+---
+
+${LV_BOOTSTRAP_SKILL_BODY}
+`;
+}
+
+/**
+ * Renders \`.claude/commands/lv/bootstrap.md\`, invoked as \`/lv:bootstrap <feature-id>\` — one of
+ * the "known command shapes" \`installLvBootstrapSkill()\` writes in addition to the universal
+ * skill file, mirroring the frontmatter shape OpenSpec itself generates for Claude's own commands.
+ */
+export function buildLvBootstrapClaudeCommandFile(): string {
+  return `---
+name: "LV: Bootstrap"
+description: "${LV_BOOTSTRAP_SKILL_DESCRIPTION}"
+allowed-tools: Bash(lv bootstrap:*)
+---
+
+${LV_BOOTSTRAP_SKILL_BODY}
+`;
+}
+
+/**
+ * Renders \`.cursor/commands/lv-bootstrap.md\`, invoked as \`/lv-bootstrap <feature-id>\` — the
+ * other "known command shape", mirroring Cursor's own command frontmatter shape (no
+ * \`allowed-tools\` field, unlike its \`SKILL.md\`).
+ */
+export function buildLvBootstrapCursorCommandFile(): string {
+  return `---
+name: "/lv-bootstrap"
+id: "lv-bootstrap"
+category: "Workflow"
+description: "${LV_BOOTSTRAP_SKILL_DESCRIPTION}"
+---
+
+${LV_BOOTSTRAP_SKILL_BODY}
+`;
+}
 
 // ---------------------------------------------------------------------------
 // Start — match an existing feature before allocating a new one
@@ -254,44 +283,3 @@ export const PROPOSE_UI_DESIGN_LINE =
 // (e.g. video).
 export const PROPOSE_ATTACHMENT_LINE =
   'LV Crew: that same `state.yaml` may also have a non-empty `attachments` — repo-relative paths to files `lv start` already downloaded from the ticket. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), read each listed file directly (no fetch needed) and reflect what you observe in `proposal.md`\'s "What Changes" and "Impact" sections. If a file\'s format can\'t be read directly (e.g. a video), cite its name and path instead of guessing at its content.';
-
-export function buildBootstrapScanPrompt(
-  featureId: string,
-  repoRoot: string,
-  existingOverviewMd?: string,
-  existingDesignMd?: string,
-  featureName?: string,
-  featureDescription?: string,
-  uiDesignRefs?: string[],
-  outputLanguage?: string,
-): string {
-  const draftParts: string[] = [];
-  if (featureName || featureDescription) {
-    draftParts.push(
-      `## Feature hint\n${featureName ? `Name: ${featureName}\n` : ""}${featureDescription ? `Description: ${featureDescription}\n` : ""}`,
-    );
-  }
-  if (uiDesignRefs && uiDesignRefs.length > 0) {
-    draftParts.push(
-      `## UI design references\n${uiDesignRefs.map((ref) => `- ${ref}`).join("\n")}\n`,
-    );
-  }
-  if (existingOverviewMd) {
-    draftParts.push(
-      `## Existing draft overview.md (refine this, don't discard it)\n\n${existingOverviewMd}`,
-    );
-  }
-  if (existingDesignMd) {
-    draftParts.push(
-      `## Existing draft design.md (refine this, don't discard it)\n\n${existingDesignMd}`,
-    );
-  }
-  const draftSection =
-    draftParts.length > 0 ? `${draftParts.join("\n\n")}\n\n` : "";
-
-  return `Explore the codebase to produce finalized overview.md and design.md content for the feature '${featureId}'.
-
-**Repo root:** ${repoRoot}
-
-${draftSection}Use your tools (listFiles, readFile, searchCode) to find and read the code relevant to '${featureId}' before writing anything.${buildOutputLanguageParagraph(outputLanguage)}`;
-}

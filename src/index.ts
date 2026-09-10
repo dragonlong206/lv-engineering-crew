@@ -26,14 +26,22 @@ program
 
 program
   .command('bootstrap <feature-id>')
-  .description('Generate feature docs from code — from --paths, by scanning the repo autonomously, or as placeholders for a brand-new feature')
-  .option('--paths <paths>', 'Comma-separated paths to read code from (omit to scan the repo autonomously)')
-  .option('--name <name>', 'Feature name hint for autonomous scan mode (no --paths)')
-  .option('--description <description>', 'Feature description hint for autonomous scan mode (no --paths)')
+  .description('Generate feature docs — placeholder mode, or via the lv-bootstrap skill/command using --context/--finalize')
+  .option('--paths <paths>', 'Comma-separated paths for --context to scope exploration to (optional)')
+  .option('--name <name>', 'Feature name hint for --context')
+  .option('--description <description>', 'Feature description hint for --context')
   .option('--new-feature', 'Skip code scanning and write placeholder-only docs for a feature with no code yet')
-  .action(async (featureId: string, opts: { paths?: string; name?: string; description?: string; newFeature?: boolean }) => {
+  .option('--context', 'Print JSON context for the lv-bootstrap skill/command to consume (no LLM call)')
+  .option('--finalize', 'Update the feature index and sync Lark after the skill has written overview.md/design.md (no LLM call, requires --title)')
+  .option('--title <title>', 'Feature title to use with --finalize')
+  .action(async (featureId: string, opts: { paths?: string; name?: string; description?: string; newFeature?: boolean; context?: boolean; finalize?: boolean; title?: string }) => {
     const { runBootstrap } = await import('./cli/bootstrap.js');
-    await runBootstrap(featureId, opts.paths, { name: opts.name, description: opts.description }, { newFeature: opts.newFeature }).catch(die);
+    await runBootstrap(
+      featureId,
+      opts.paths,
+      { name: opts.name, description: opts.description },
+      { newFeature: opts.newFeature, context: opts.context, finalize: opts.finalize, title: opts.title },
+    ).catch(die);
   });
 
 program
