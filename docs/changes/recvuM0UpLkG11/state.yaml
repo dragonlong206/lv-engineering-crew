@@ -1,0 +1,12 @@
+ticket_id: recvuM0UpLkG11
+title: Make lv bootstrap a skill like OpenSpec
+description: >-
+  lv bootstrap call LLM in a lot of round trips and consume a lot token. While
+  prompt on coding agent like Claude Code is quicker and cheaper. So convert lv
+  bootstrap to a skill and command (in Claude) same as the way OpenSpec do.
+feature_ids:
+  - lv-bootstrap
+branch: feature/recvuM0UpLkG11-make-lv-bootstrap-a-skill-like-openspec
+created_at: '2026-09-10T00:45:11.456Z'
+lv_version: 0.1.0
+openspec_changes: []
