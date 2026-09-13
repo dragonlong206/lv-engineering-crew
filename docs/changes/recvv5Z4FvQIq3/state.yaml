@@ -1,0 +1,12 @@
+ticket_id: recvv5Z4FvQIq3
+title: '`lv bootstrap` is not executed after OpenSpec archive'
+description: >-
+  `lv bootstrap`is converted to skill at ticket recvuM0UpLkG11 while keeping CLI
+  version. After that, OpenSpec archive does not trigger `lv bootstrap` anymore
+feature_ids:
+  - lv-bootstrap
+branch: feature/recvv5Z4FvQIq3-lv-bootstrap-is-not-executed-after-openspec-archiv
+created_at: '2026-09-13T10:41:48.188Z'
+lv_version: 0.1.0
+openspec_changes:
+  - fix-archive-bootstrap-guidance

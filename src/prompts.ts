@@ -225,6 +225,14 @@ Return ONLY strict JSON matching this shape — no surrounding text, no code fen
 // OpenSpec init — instructional text written into openspec/config.yaml
 // ---------------------------------------------------------------------------
 
+// Superseded wording from before `lv bootstrap` was converted to a coding-agent skill/command
+// (PR #16, `e70bcdb`) — bare `lv bootstrap <feature-id>` used to regenerate docs directly, but
+// now errors without an explicit mode flag. Kept only so `addContextPointer()` can detect and
+// upgrade a project's already-installed copy of this exact line in place; see
+// `LEGACY_ARCHIVE_GUIDANCE` below for the equivalent on the archive-guidance side.
+export const LEGACY_CONTEXT_POINTER_SYNC_LINE =
+  "- if you are running `/opsx:sync` directly (syncing delta specs to main specs without archiving), also refresh docs for any feature IDs this change touches by running `lv bootstrap <feature-id>` — this is a convention, not enforced by any tooling check";
+
 // Kept as an array (not just a joined string) so `addContextPointer()` can check each line's
 // presence independently — a repo already wired with an earlier, shorter version of this
 // pointer should only gain the lines it's missing on the next `lv init`, not a duplicate of
@@ -233,7 +241,7 @@ export const CONTEXT_POINTER_LINES = [
   "LV Crew context: before proposing, designing, or implementing anything, read:",
   "- the feature docs under `docs/features/<feature-id>/{overview.md,design.md}` for any feature IDs this change touches",
   "- the current change's ticket/description context in `docs/changes/<change-id>/state.yaml` (the directory matching the current git branch)",
-  "- if you are running `/opsx:sync` directly (syncing delta specs to main specs without archiving), also refresh docs for any feature IDs this change touches by running `lv bootstrap <feature-id>` — this is a convention, not enforced by any tooling check",
+  "- if you are running `/opsx:sync` directly (syncing delta specs to main specs without archiving), also refresh docs for any feature IDs this change touches by invoking the `lv-bootstrap` skill/command for each — this is a convention, not enforced by any tooling check",
   "- also check `.lv.yaml` for an `output_language` setting; if set, write all generated artifact prose in that language — code blocks, identifiers, file paths, and command names stay untranslated, headings may stay in English",
 ];
 
@@ -241,11 +249,17 @@ export const CONTEXT_POINTER_LINES = [
 // enough to apply to every change, so `lv start` never has to rewrite it per-change.
 export const CONTEXT_POINTER = CONTEXT_POINTER_LINES.join("\n");
 
+// Superseded wording from before `lv bootstrap` was converted to a coding-agent skill/command
+// (PR #16, `e70bcdb`) — see `LEGACY_CONTEXT_POINTER_SYNC_LINE` above. Kept only so
+// `addArchiveGuidance()` can detect and upgrade a project's already-installed copy in place.
+export const LEGACY_ARCHIVE_GUIDANCE =
+  "When archiving, sync all delta to OpenSpec specs by default. Before completing this archive, refresh the docs of every feature this change touches by running `lv bootstrap <feature-id>`: use the feature IDs recorded in this change's `docs/changes/<change-id>/state.yaml` when present; otherwise, for each of this change's delta spec capability paths, treat its leading path segment as a feature ID and refresh it if a matching `docs/features/<id>/` directory exists.";
+
 // Written into `operations.archive.guidance` — read by the generated `/opsx:archive` workflow
 // (`openspec instructions archive --change <name> --json`'s `operationGuidance` field) and
 // followed advisorily, never blocking the archive if ignored.
 export const ARCHIVE_GUIDANCE =
-  "When archiving, sync all delta to OpenSpec specs by default. Before completing this archive, refresh the docs of every feature this change touches by running `lv bootstrap <feature-id>`: use the feature IDs recorded in this change's `docs/changes/<change-id>/state.yaml` when present; otherwise, for each of this change's delta spec capability paths, treat its leading path segment as a feature ID and refresh it if a matching `docs/features/<id>/` directory exists.";
+  "When archiving, sync all delta to OpenSpec specs by default. Before completing this archive, refresh the docs of every feature this change touches by invoking the `lv-bootstrap` skill/command for that feature ID (bare `lv bootstrap <feature-id>` now errors without an explicit mode flag): use the feature IDs recorded in this change's `docs/changes/<change-id>/state.yaml` when present; otherwise, for each of this change's delta spec capability paths, treat its leading path segment as a feature ID and refresh it if a matching `docs/features/<id>/` directory exists.";
 
 // Patched into the generated `/opsx:propose` workflow file(s) by `addProposeStateAutoload()`
 // in init.ts, as a new line inserted right before that workflow's "ask the user" step. The
