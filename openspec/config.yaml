@@ -11,8 +11,8 @@ context: >-
 
   - if you are running `/opsx:sync` directly (syncing delta specs to main specs
   without archiving), also refresh docs for any feature IDs this change touches
-  by running `lv bootstrap <feature-id>` — this is a convention, not enforced by
-  any tooling check
+  by invoking the `lv-bootstrap` skill/command for each — this is a convention,
+  not enforced by any tooling check
 
 
 
@@ -25,8 +25,10 @@ operations:
       - >-
         When archiving, sync all delta to OpenSpec specs by default. Before
         completing this archive, refresh the docs of every feature this change
-        touches by running `lv bootstrap <feature-id>`: use the feature IDs
-        recorded in this change's `docs/changes/<change-id>/state.yaml` when
-        present; otherwise, for each of this change's delta spec capability
-        paths, treat its leading path segment as a feature ID and refresh it if
-        a matching `docs/features/<id>/` directory exists.
+        touches by invoking the `lv-bootstrap` skill/command for that feature ID
+        (bare `lv bootstrap <feature-id>` now errors without an explicit mode
+        flag): use the feature IDs recorded in this change's
+        `docs/changes/<change-id>/state.yaml` when present; otherwise, for each
+        of this change's delta spec capability paths, treat its leading path
+        segment as a feature ID and refresh it if a matching
+        `docs/features/<id>/` directory exists.

@@ -7,7 +7,9 @@ import { getRepoRoot } from "../config.js";
 import { printInfo, printSuccess, printError, confirm, writeFile } from "./helpers.js";
 import {
   CONTEXT_POINTER_LINES,
+  LEGACY_CONTEXT_POINTER_SYNC_LINE,
   ARCHIVE_GUIDANCE,
+  LEGACY_ARCHIVE_GUIDANCE,
   PROPOSE_STATE_AUTOLOAD_LINE,
   PROPOSE_LINK_CHANGE_LINE,
   PROPOSE_UI_DESIGN_LINE,
@@ -27,6 +29,19 @@ const OPENSPEC_PACKAGE = "@fission-ai/openspec";
 
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
+}
+
+// Builds a regex matching `text` with any run of whitespace in it treated as "one or more
+// whitespace characters" — so it locates `text` inside a YAML-reflowed/wrapped/folded copy of
+// itself (differing line breaks, differing wrap points) instead of requiring a byte-exact
+// substring or a known paragraph boundary.
+function flexibleWhitespacePattern(text: string): RegExp {
+  const source = text
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
+  return new RegExp(source);
 }
 
 /**
@@ -107,7 +122,32 @@ function addContextPointer(repoRoot: string): void {
     return;
   }
 
-  const raw = fs.readFileSync(configPath, "utf-8");
+  let raw = fs.readFileSync(configPath, "utf-8");
+  const hasActiveContextKey = /^context:/m.test(raw);
+
+  // Upgrade a previously-installed copy of the now-superseded sync-convention line (index 3) in
+  // place, before checking what's still missing below — otherwise the old line would be left in
+  // the file while the corrected line gets appended alongside it as a second, duplicate entry.
+  // `context:` is stored as one joined multi-line string, re-wrapped/folded by js-yaml on write
+  // (and, across incremental `lv init` runs over this repo's history, joined with an inconsistent
+  // mix of single newlines and blank-line separators between entries) — so the target line is
+  // matched with a whitespace-flexible regex built from its own words, not a paragraph split or
+  // an exact substring of the (differently-wrapped) constant.
+  if (
+    hasActiveContextKey &&
+    normalizeWhitespace(raw).includes(normalizeWhitespace(LEGACY_CONTEXT_POINTER_SYNC_LINE)) &&
+    !normalizeWhitespace(raw).includes(normalizeWhitespace(CONTEXT_POINTER_LINES[3]))
+  ) {
+    const parsed = (yaml.load(raw) as Record<string, unknown>) ?? {};
+    const existing = typeof parsed.context === "string" ? parsed.context : "";
+    const legacyPattern = flexibleWhitespacePattern(LEGACY_CONTEXT_POINTER_SYNC_LINE);
+    if (legacyPattern.test(existing)) {
+      parsed.context = existing.replace(legacyPattern, CONTEXT_POINTER_LINES[3]);
+      fs.writeFileSync(configPath, yaml.dump(parsed, { indent: 2 }), "utf-8");
+      raw = fs.readFileSync(configPath, "utf-8");
+    }
+  }
+
   // Compare with whitespace collapsed — YAML re-wrapping/indentation (block literal on a
   // fresh append vs. re-flowed by js-yaml's dump on a merge) must not defeat this check.
   const normalizedRaw = normalizeWhitespace(raw);
@@ -117,7 +157,6 @@ function addContextPointer(repoRoot: string): void {
   if (missingLines.length === 0) return; // already fully wired
 
   const addition = missingLines.join("\n");
-  const hasActiveContextKey = /^context:/m.test(raw);
 
   if (!hasActiveContextKey) {
     // Fresh template — `context:` only appears commented out. Append a new top-level key
@@ -145,7 +184,10 @@ function addContextPointer(repoRoot: string): void {
  * generated archive workflow is told to refresh feature docs for the archiving change before
  * completing — read via `openspec instructions archive --change <name> --json`'s
  * `operationGuidance` field, which the generated `/opsx:archive` workflow already reads and
- * follows advisorily (never blocking the archive if ignored).
+ * follows advisorily (never blocking the archive if ignored). Also upgrades a previously-written
+ * copy of `LEGACY_ARCHIVE_GUIDANCE` (the wording used before `lv bootstrap` became a
+ * skill/command) to the current `ARCHIVE_GUIDANCE` in place, so a project `lv init` already ran
+ * against doesn't end up with both the stale and corrected wording side by side.
  */
 function addArchiveGuidance(repoRoot: string): void {
   const configPath = path.join(repoRoot, "openspec", "config.yaml");
@@ -181,7 +223,16 @@ function addArchiveGuidance(repoRoot: string): void {
   const archive = (operations.archive as Record<string, unknown>) ?? {};
   const guidance = Array.isArray(archive.guidance) ? (archive.guidance as string[]) : [];
 
-  if (!guidance.some((entry) => normalizeWhitespace(String(entry)) === normalizeWhitespace(ARCHIVE_GUIDANCE))) {
+  // Upgrade a previously-installed copy of the now-superseded wording in place, rather than
+  // leaving it stale or appending the current wording as a second, duplicate entry — matched
+  // via normalized content (not a raw substring) since YAML re-serializes this entry as a
+  // folded/wrapped block scalar, not the single-line form either constant is written as here.
+  const legacyIndex = guidance.findIndex(
+    (entry) => normalizeWhitespace(String(entry)) === normalizeWhitespace(LEGACY_ARCHIVE_GUIDANCE),
+  );
+  if (legacyIndex !== -1) {
+    guidance[legacyIndex] = ARCHIVE_GUIDANCE;
+  } else if (!guidance.some((entry) => normalizeWhitespace(String(entry)) === normalizeWhitespace(ARCHIVE_GUIDANCE))) {
     guidance.push(ARCHIVE_GUIDANCE);
   }
 

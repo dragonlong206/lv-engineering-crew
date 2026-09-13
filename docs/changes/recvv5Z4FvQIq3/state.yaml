@@ -8,4 +8,5 @@ feature_ids:
 branch: feature/recvv5Z4FvQIq3-lv-bootstrap-is-not-executed-after-openspec-archiv
 created_at: '2026-09-13T10:41:48.188Z'
 lv_version: 0.1.0
-openspec_changes: []
+openspec_changes:
+  - fix-archive-bootstrap-guidance

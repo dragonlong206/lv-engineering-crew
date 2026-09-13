@@ -29,9 +29,9 @@ It writes or updates these parts of the file:
 - `context:` receives a multiline string containing:
   - a reminder to read `docs/features/<feature-id>/{overview.md,design.md}` for touched features
   - a pointer to `docs/changes/<change-id>/state.yaml` for the current change
-  - a convention, not an enforced check, to run `lv bootstrap <feature-id>` when syncing specs directly with `/opsx:sync`
+  - a convention, not an enforced check, to invoke the `lv-bootstrap` skill/command for each touched feature ID when syncing specs directly with `/opsx:sync`
   - a reminder to honor `.lv.yaml`'s `output_language` setting when generating prose
-- `operations.archive.guidance:` receives one list item instructing archive workflows to refresh the docs of every touched feature before completing
+- `operations.archive.guidance:` receives one list item instructing archive workflows to refresh the docs of every touched feature before completing, by invoking the `lv-bootstrap` skill/command for each feature ID (not a bare `lv bootstrap <feature-id>` call, which errors under the current CLI once it requires an explicit mode flag)
 
 The command also patches generated `/opsx:propose` workflow files in these locations when they exist:
 
@@ -71,7 +71,8 @@ Separately, `installLvBootstrapSkill()` writes:
 - `addProposeAttachmentInstruction(repoRoot: string)` in `src/cli/init.ts`
 - `addProposeLinkInstruction(repoRoot: string)` in `src/cli/init.ts`
 - `installLvBootstrapSkill(repoRoot: string)` in `src/cli/init.ts`, using `findOpenSpecToolBaseDirs(repoRoot: string)` for detection and the `LV_BOOTSTRAP_KNOWN_COMMAND_SHAPES` map for the command-file step
-- `CONTEXT_POINTER_LINES`, `ARCHIVE_GUIDANCE`, `PROPOSE_STATE_AUTOLOAD_LINE`, `PROPOSE_LINK_CHANGE_LINE`, `PROPOSE_UI_DESIGN_LINE`, `PROPOSE_ATTACHMENT_LINE`, `buildLvBootstrapSkillFile()`, `buildLvBootstrapClaudeCommandFile()`, and `buildLvBootstrapCursorCommandFile()` in `src/prompts.ts`
+- `CONTEXT_POINTER_LINES`, `LEGACY_CONTEXT_POINTER_SYNC_LINE`, `ARCHIVE_GUIDANCE`, `LEGACY_ARCHIVE_GUIDANCE`, `PROPOSE_STATE_AUTOLOAD_LINE`, `PROPOSE_LINK_CHANGE_LINE`, `PROPOSE_UI_DESIGN_LINE`, `PROPOSE_ATTACHMENT_LINE`, `buildLvBootstrapSkillFile()`, `buildLvBootstrapClaudeCommandFile()`, and `buildLvBootstrapCursorCommandFile()` in `src/prompts.ts` — the `LEGACY_*` constants hold each guidance's wording from before `lv bootstrap` became a skill/command, kept only so the patching functions below can detect and upgrade an already-installed copy
+- `flexibleWhitespacePattern(text: string): RegExp` in `src/cli/init.ts`, used by `addContextPointer()` to locate `LEGACY_CONTEXT_POINTER_SYNC_LINE` inside the YAML-reflowed `context:` string regardless of how it was line-wrapped
 
 ## Key design decisions
 
@@ -80,6 +81,7 @@ Separately, `installLvBootstrapSkill()` writes:
 - The command captures `openspec init` stderr while still streaming output live to the terminal, so failures can include useful diagnostics.
 - `openspec/config.yaml` is updated with whitespace-normalized idempotency checks, so rerunning `lv init` does not duplicate guidance even if formatting changes.
 - Fresh templates are patched by appending YAML, preserving generated comments. When a section is already active, the code falls back to YAML parsing and rewriting so missing nested keys can be merged structurally.
+- Both `addArchiveGuidance()` and `addContextPointer()` also upgrade a previously-installed copy of their guidance in place when it still carries an earlier wording (`LEGACY_ARCHIVE_GUIDANCE`/`LEGACY_CONTEXT_POINTER_SYNC_LINE`), instead of leaving the outdated wording in place or appending the current wording as a second, duplicate entry — mirroring the existing `LEGACY_PROPOSE_STATE_AUTOLOAD_LINE` → replace pattern `addProposeStateAutoload()` already uses for its own prior wording change. `addArchiveGuidance()` matches the legacy entry within the parsed `operations.archive.guidance` array by normalized content; `addContextPointer()` matches it within the parsed `context:` string with a whitespace-flexible regex (`flexibleWhitespacePattern()`), since that string's line wrapping/joins differ across `lv init` runs (single-newline joins in one run, blank-line-separated joins from another) and a fixed paragraph-boundary split cannot be relied on to isolate the entry.
 - The archive guidance is advisory only. It is read by OpenSpec's generated archive workflow and does not block completion if ignored.
 - The `/opsx:propose` workflow patches are best-effort and shape-dependent. They are not driven by `openspec/config.yaml`; they are inserted directly into generated workflow files because those steps need to run before OpenSpec's context instructions are surfaced.
 - The UI-design and attachment instructions are scoped to `/opsx:propose` only, because they are only useful when writing the proposal artifact.

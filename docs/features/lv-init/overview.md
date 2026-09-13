@@ -17,8 +17,9 @@
 3. If OpenSpec is missing, it prompts to install `@fission-ai/openspec` globally with npm. If the user declines, the command prints a manual install hint and stops.
 4. It runs `openspec init <repoRoot>`, passing `--tools <tool>` when `--tool` is provided.
 5. After OpenSpec installs, it patches generated files in place:
-   - `openspec/config.yaml` gets a `context:` block that points OpenSpec at LV feature docs, the current change state, a convention for `/opsx:sync`, and the configured output language if any.
-   - `openspec/config.yaml` gets `operations.archive.guidance` that tells archive workflows to refresh touched feature docs before finishing.
+   - `openspec/config.yaml` gets a `context:` block that points OpenSpec at LV feature docs, the current change state, a convention for `/opsx:sync`, and the configured output language if any. The `/opsx:sync` convention line instructs invoking the `lv-bootstrap` skill/command for each touched feature ID (not a bare `lv bootstrap <feature-id>` call, which now errors without an explicit mode flag).
+   - `openspec/config.yaml` gets `operations.archive.guidance` that tells archive workflows to refresh touched feature docs before finishing, by invoking the `lv-bootstrap` skill/command for each — the same corrected wording as the `/opsx:sync` convention line.
+   - if a project's `openspec/config.yaml` already carries an earlier version of either the archive guidance or the sync-convention line (from before `lv bootstrap` became a skill/command), that step upgrades it to the current wording in place instead of leaving it stale or duplicating it.
    - generated `/opsx:propose` workflow files, when present, are patched to:
      - autoload change state before asking for a description
      - record the created OpenSpec change back to LV
@@ -33,7 +34,7 @@
 - `--tool` is optional. When omitted, `openspec init` runs without a `--tools` argument (its own interactive picker decides).
 - The CLI help says multiple tools should be passed as a quoted comma-separated value, for example `--tool "claude,codex"`.
 - `openspec init` failures include captured `stderr` in the printed error message.
-- The config and skill/command file updates are all idempotent — re-running `lv init` does not duplicate content.
+- The config and skill/command file updates are all idempotent — re-running `lv init` does not duplicate content, and a previously-installed copy of the archive guidance or sync-convention line using an earlier wording is upgraded to the current wording in place rather than left stale or duplicated.
 - Fresh-template handling preserves OpenSpec scaffold comments by appending raw YAML when the target key is still commented out.
 - If `openspec/config.yaml` is missing after install, the command prints an error and skips that patch step.
 - The `/opsx:propose` workflow patches are opportunistic. If the expected upstream text shape changes, the command logs an error and leaves that file unmodified.
@@ -42,4 +43,4 @@
 
 ## Current state of the code
 
-The command is implemented and wired into the CLI. It installs OpenSpec when needed, writes LV context into the generated OpenSpec config, patches generated propose workflows when those files exist, and installs the `lv-bootstrap` skill/command for every coding agent it detects. The feature reflects the current `src/cli/init.ts` behavior, including `ui_design`/`attachments` handling, output-language guidance, and the `lv-bootstrap` skill/command install step added alongside the conversion of `lv bootstrap`'s own generation modes into a coding-agent skill.
+The command is implemented and wired into the CLI. It installs OpenSpec when needed, writes LV context into the generated OpenSpec config, patches generated propose workflows when those files exist, and installs the `lv-bootstrap` skill/command for every coding agent it detects. The feature reflects the current `src/cli/init.ts` behavior, including `ui_design`/`attachments` handling, output-language guidance, and the `lv-bootstrap` skill/command install step added alongside the conversion of `lv bootstrap`'s own generation modes into a coding-agent skill. The archive-guidance and `/opsx:sync`-convention wording was corrected to instruct invoking the `lv-bootstrap` skill/command (the original wording, written before that conversion, told agents to run a bare `lv bootstrap <feature-id>` that now errors), and the corresponding config-patching functions upgrade a previously-installed copy of the old wording in place on the next `lv init` run.
