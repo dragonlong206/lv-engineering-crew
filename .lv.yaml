@@ -89,6 +89,15 @@ models:
   bootstrap: openai/gpt-5.4-mini
   init: openai/gpt-5.4-mini
 
+# OpenSpec workflow settings `lv init` wires into generated coding-agent files.
+openspec:
+  # Claude Code model alias/id (e.g. "haiku") to pin the generated `/opsx:apply` command to —
+  # unlike `models` above (Mastra "provider/model" strings for LV's own agents), this value is
+  # read by Claude Code itself to pick which model executes that slash command. `lv init`
+  # idempotently writes it into `.claude/commands/opsx/apply.md`'s frontmatter; omit to leave
+  # the command unpinned.
+  apply_model: haiku
+
 # Feature ID auto-increment used by `lv init` (e.g. F0001, F0002, ...)
 feature_id_prefix: "F"
 feature_id_digits: 4
