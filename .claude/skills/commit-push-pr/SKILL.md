@@ -1,6 +1,6 @@
 ---
 name: commit-push-pr
-description: Commit the current changes, push the branch, and open a GitHub pull request with the gh CLI, with the PR body built from the change's OpenSpec docs (proposal, design, specs, tasks) when they exist. Use whenever the user wants to ship work — "commit, push and create PR", "create a PR", "open a pull request", "send this up for review", "ship it", "push this and PR it". DO NOT use this skill if the user only mentions ("commit" or "push" or "commit and push") and doesn't mention a PR or a pull request.
+description: Commit the current changes, push the branch, and open a GitHub pull request with the gh CLI, with the PR body built from the change's OpenSpec docs (proposal, design, specs, tasks) when they exist. Also works when only the PR is wanted (work already committed): it then skips the commit and push as needed. Use whenever the user wants to ship work — "commit, push and create PR", "create a PR", "open a pull request", "send this up for review", "ship it", "push this and PR it". DO NOT use this skill if the user only mentions ("commit" or "push" or "commit and push") and doesn't mention a PR or a pull request.
 allowed-tools: Bash(git:*), Bash(gh:*), Bash(openspec:*)
 ---
 
@@ -19,11 +19,23 @@ git log --format=%s -8
 
 - The recent subjects tell you the repo's commit style (prefix conventions, `(#123)` suffixes, tense). Match it rather than imposing your own.
 - If the working tree is clean and the branch has no commits ahead of its base, stop and say there is nothing to ship.
+- Also check what's already on the remote: `git rev-list --count @{u}..HEAD 2>/dev/null` (fails when there's no upstream yet, which means nothing is pushed).
+
+## 1b. Decide how far to go
+
+The stages below (commit, push, PR) are each skipped when there's nothing left to do, so the same skill serves "ship everything" and "just open the PR". Decide from the request wording and the state you just read:
+
+- **Ship it** ("commit, push and create PR", "ship it"): run every stage that has work. Dirty files that belong to the change → commit (3, 3b). Commits not on the remote → push (4). Then the PR (5).
+- **PR only** ("create a PR", "open a PR for this branch", or the work is already committed and the user just wants the PR): the user didn't ask for a commit, so don't create one. Skip 3 and 3b, push only if commits are missing from the remote, then open the PR (5). If the tree has uncommitted changes, list them and say they won't be in the PR; ask only if they look like part of the work. Committing files the user didn't ask to commit is hard to take back once pushed.
+- **Already pushed, PR exists**: report the existing PR URL and stop, unless the user asked to update it.
+
+Step 2b (archiving) applies to "ship it" as-is. In PR-only mode, archiving would create new uncommitted files, so if the change isn't archived yet, ask once: "Archive it first? That adds one commit containing only the archive changes." Archive and commit only that on a yes; on a no, open the PR unarchived and say so in the report.
 
 ## 2. Pick the branch
 
 - On the default branch (`main`/`master`, check with `git symbolic-ref refs/remotes/origin/HEAD`): create a new branch first. Committing straight to the default branch and pushing it bypasses review, which is the opposite of what a PR is for. Name it from the change (`fix/short-summary`), following any existing branch pattern visible in `git branch -a`.
 - Already on a feature branch: stay on it.
+- On the default branch with local commits ahead of `origin/<default>` (PR-only case): branch from `HEAD` so the commits come along, and tell the user local `main` still has them. Don't reset `main` without asking.
 
 ## 2b. Archive the OpenSpec change first
 
@@ -50,6 +62,8 @@ Afterwards `git status` should show the change moved into `openspec/changes/arch
 
 ## 3. Stage deliberately
 
+(Skip 3 and 3b when there's nothing to commit or in PR-only mode, per step 1b.)
+
 Read the diff and decide which files belong to this change. `git add -A` sweeps in everything dirty, including unrelated edits, generated files, and secrets (`.env`, `*.local.yaml`, credentials). Stage by path instead. If some dirty files look unrelated to the work being shipped, leave them out and tell the user; if it's ambiguous which belong, ask.
 
 If the repo documents that a tool auto-stages everything (check CLAUDE.md), heed that gotcha before running it.
@@ -72,6 +86,8 @@ EOF
 Add any commit attribution line the session's instructions call for. If a pre-commit hook fails, fix the cause and make a new commit — don't bypass with `--no-verify`.
 
 ## 4. Push
+
+Skip if the remote already has every commit (step 1's `@{u}..HEAD` count is 0).
 
 ```bash
 git push -u origin "$(git branch --show-current)"
