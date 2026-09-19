@@ -78,6 +78,15 @@ export const ModelsConfigSchema = z.object({
 });
 export type ModelsConfig = z.infer<typeof ModelsConfigSchema>;
 
+// `apply_model` is a Claude Code model alias/id (e.g. "haiku"), consumed by `lv init` to pin the
+// generated `/opsx:apply` command's frontmatter — a different runtime and value format from
+// `models` above (Mastra "provider/model" strings for LV's own agents). Unset leaves the
+// generated command's model unpinned.
+export const OpenSpecConfigSchema = z.object({
+  apply_model: z.string().optional(),
+});
+export type OpenSpecConfig = z.infer<typeof OpenSpecConfigSchema>;
+
 // Whether Mastra agent runs are traced (observability wired to the shared `mastra` instance
 // in src/mastra.ts). Defaults to enabled — see isTracingEnabled() in src/config.ts.
 export const TracingConfigSchema = z.object({
@@ -91,6 +100,9 @@ export const ConfigSchema = z.object({
   model: z.string().default("openai/gpt-4o"),
   models: ModelsConfigSchema.optional(),
   tracing: TracingConfigSchema.optional(),
+  // `.nullish()`, not `.optional()`: a `.lv.yaml` block with every child commented out (as the
+  // shipped template's `openspec:` is by default) parses as `openspec: null`, not a missing key.
+  openspec: OpenSpecConfigSchema.nullish(),
   feature_id_prefix: z.string().default("F"),
   feature_id_digits: z.number().int().positive().default(4),
   // Branch naming per type, e.g. { feature: "lv/{ticket_id}", hotfix: "hotfix/{ticket_id}" }.

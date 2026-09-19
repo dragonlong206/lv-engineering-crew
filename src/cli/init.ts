@@ -3,7 +3,8 @@ import path from "path";
 import yaml from "js-yaml";
 import { execa } from "execa";
 import which from "which";
-import { getRepoRoot } from "../config.js";
+import { getRepoRoot, loadConfig } from "../config.js";
+import type { Config } from "../types.js";
 import { printInfo, printSuccess, printError, confirm, writeFile } from "./helpers.js";
 import {
   CONTEXT_POINTER_LINES,
@@ -103,6 +104,7 @@ export async function runInit(opts: InitOptions): Promise<void> {
   addProposeUiDesignInstruction(repoRoot);
   addProposeAttachmentInstruction(repoRoot);
   installLvBootstrapSkill(repoRoot);
+  setApplyModelOverride(repoRoot, loadConfig());
 
   printSuccess("OpenSpec installed and wired to LV context.");
   console.log(`\nNext: run 'lv start <ticket-id>' or 'lv start --description "..."' to begin a change.`);
@@ -411,6 +413,53 @@ function addProposeLinkInstruction(repoRoot: string): void {
     const patched = raw.slice(0, insertAt) + insertion + raw.slice(insertAt);
     fs.writeFileSync(filePath, patched, "utf-8");
   }
+}
+
+// The only generated apply-related file documented to honor a per-command model override via
+// frontmatter — a Claude Code-specific mechanism. `.claude/skills/openspec-apply-change/SKILL.md`
+// and `.agents/skills/openspec-apply-change/SKILL.md` have no equivalent, so they're not patched
+// (see design.md Decision 2 of config-openspec-apply-llm-model).
+const APPLY_COMMAND_RELATIVE_PATH = path.join(".claude", "commands", "opsx", "apply.md");
+
+const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n/;
+
+/**
+ * Idempotently sets or clears the `model` frontmatter field on the generated Claude Code
+ * `/opsx:apply` command file from `.lv.yaml`'s `openspec.apply_model` — a Claude Code model
+ * alias/id that pins which model executes that slash command, distinct from `models:`'s Mastra
+ * "provider/model" strings used by LV's own agents. Unlike the `addPropose*Instruction()`
+ * patches (anchor-regex text inserts into markdown body), this fully parses and re-dumps the
+ * file's leading YAML frontmatter block, since it's a short, fully-generated block with no
+ * hand-authored comments worth preserving. Because `openspec update`/`openspec init --force`
+ * regenerates this file from scratch, re-run `lv init` afterward to re-apply the pin.
+ */
+function setApplyModelOverride(repoRoot: string, config: Config): void {
+  const filePath = path.join(repoRoot, APPLY_COMMAND_RELATIVE_PATH);
+  if (!fs.existsSync(filePath)) return; // tool not installed for this repo — nothing to patch
+
+  const raw = fs.readFileSync(filePath, "utf-8");
+  const match = raw.match(FRONTMATTER_RE);
+  if (!match) {
+    printError(
+      `Could not find a frontmatter block at the top of ${filePath} — skipping apply-model patch. The file may have changed shape upstream.`,
+    );
+    return;
+  }
+
+  const frontmatter = (yaml.load(match[1]) as Record<string, unknown>) ?? {};
+  const desiredModel = config.openspec?.apply_model;
+
+  if (desiredModel) {
+    if (frontmatter.model === desiredModel) return; // already pinned to this value
+    frontmatter.model = desiredModel;
+  } else {
+    if (!("model" in frontmatter)) return; // nothing to clear
+    delete frontmatter.model;
+  }
+
+  const newFrontmatterBlock = `---\n${yaml.dump(frontmatter, { indent: 2 })}---\n`;
+  const patched = newFrontmatterBlock + raw.slice(match[0].length);
+  fs.writeFileSync(filePath, patched, "utf-8");
 }
 
 // Relative path OpenSpec writes a tool's own generated SKILL.md at, under that tool's base
