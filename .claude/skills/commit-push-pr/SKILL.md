@@ -1,7 +1,7 @@
 ---
 name: commit-push-pr
-description: Commit the current changes, push the branch, and open a GitHub pull request with the gh CLI, with the PR body built from the change's OpenSpec docs (proposal, design, specs, tasks) when they exist. Use whenever the user wants to ship work — "commit and push", "create a PR", "open a pull request", "send this up for review", "ship it", "push this and PR it" — even if they only mention one of the steps, and even if they don't say "GitHub" explicitly.
-allowed-tools: Bash(git:*), Bash(gh:*)
+description: Commit the current changes, push the branch, and open a GitHub pull request with the gh CLI, with the PR body built from the change's OpenSpec docs (proposal, design, specs, tasks) when they exist. Use whenever the user wants to ship work — "commit, push and create PR", "create a PR", "open a pull request", "send this up for review", "ship it", "push this and PR it". DO NOT use this skill if the user only mentions ("commit" or "push" or "commit and push") and doesn't mention a PR or a pull request.
+allowed-tools: Bash(git:*), Bash(gh:*), Bash(openspec:*)
 ---
 
 Take the working tree from "changes on disk" to "open PR", in one pass. Each step is cheap to do right and annoying to undo once pushed, so look before you act.
@@ -25,17 +25,40 @@ git log --format=%s -8
 - On the default branch (`main`/`master`, check with `git symbolic-ref refs/remotes/origin/HEAD`): create a new branch first. Committing straight to the default branch and pushing it bypasses review, which is the opposite of what a PR is for. Name it from the change (`fix/short-summary`), following any existing branch pattern visible in `git branch -a`.
 - Already on a feature branch: stay on it.
 
+## 2b. Archive the OpenSpec change first
+
+Ship the change already archived, so the PR carries the finished record (the change moved under `openspec/changes/archive/`, main specs updated, feature docs refreshed) instead of leaving a stale active change behind for a follow-up chore.
+
+**Find the change name(s)** in this order, stopping at the first hit. Step 5a reuses the result.
+
+1. `docs/changes/*/state.yaml` whose `branch:` equals the current branch. Its `openspec_changes:` list holds the names. (The change name usually differs from the ticket ID, so don't guess it from the branch name.) Also read `ticket_id`, `title` and `feature_ids` from it.
+2. Otherwise, changes touched by this branch: `git diff <base>...HEAD --name-only | grep '^openspec/changes/'`, taking the directory name after `changes/` (or after `changes/archive/<date>-`).
+3. Otherwise, an `openspec/changes/<name>/` that is untracked or modified in the working tree.
+
+If nothing resolves, there is no OpenSpec work here: skip to step 3.
+
+**Check each name.**
+
+- `openspec/changes/archive/<date>-<name>/` exists and `openspec/changes/<name>/` does not: already archived, nothing to do.
+- `openspec/changes/<name>/` exists: not archived yet, so archive it.
+
+**Before archiving, look at `tasks.md`.** Archiving marks the change as done, so if it has unchecked tasks, don't archive on your own. Tell the user which tasks are open and ask whether to archive anyway, finish them first, or skip archiving. Likewise skip archiving when the user said this is work-in-progress or a draft, and say you skipped it.
+
+**Archive** by running the repo's OpenSpec archive workflow (the `openspec-archive-change` skill, i.e. `/opsx:archive <name>`), and let it finish. In a repo wired by `lv init` it also follows the archive guidance (syncs delta specs into `openspec/specs/`, refreshes `docs/features/<id>/` via `lv bootstrap`), so don't redo those by hand. If it stops to ask something, relay the question to the user rather than answering for them. If archiving fails, stop and report; don't push a half-archived tree.
+
+Afterwards `git status` should show the change moved into `openspec/changes/archive/`, plus updated `openspec/specs/` and `docs/features/` files. Those belong in this commit (step 3).
+
 ## 3. Stage deliberately
 
 Read the diff and decide which files belong to this change. `git add -A` sweeps in everything dirty, including unrelated edits, generated files, and secrets (`.env`, `*.local.yaml`, credentials). Stage by path instead. If some dirty files look unrelated to the work being shipped, leave them out and tell the user; if it's ambiguous which belong, ask.
 
 If the repo documents that a tool auto-stages everything (check CLAUDE.md), heed that gotcha before running it.
 
-Include the change's `openspec/changes/<name>/` files and any `docs/changes/*/state.yaml` in the commit when they're part of this work — the reviewer needs the plan alongside the code.
+Include the change's OpenSpec files and any `docs/changes/*/state.yaml` in the commit when they're part of this work, since the reviewer needs the plan alongside the code. After step 2b that means the archive move, so stage both the removed `openspec/changes/<name>/` paths and the new `openspec/changes/archive/<date>-<name>/` (for example `git add -A -- openspec/changes openspec/specs docs/features/<id>`, scoped to those paths only), plus the specs and feature docs the archive updated.
 
 ## 3b. Commit
 
-Write the message from the actual diff: a short imperative subject (≤72 chars) saying what changed and why it matters, plus a body only when the *why* isn't obvious from the subject. Pass it via heredoc so formatting survives:
+Write the message from the actual diff: a short imperative subject (≤72 chars) saying what changed and why it matters, plus a body only when the _why_ isn't obvious from the subject. Pass it via heredoc so formatting survives:
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -64,30 +87,31 @@ Otherwise, review **all** commits going into the PR (`git log <base>..HEAD`, `gi
 
 ### 5a. Find the OpenSpec change(s)
 
-The change's proposal, design and tasks were already written to explain this work, so reuse them instead of re-summarizing the diff. That keeps the PR faithful to what was planned and spares the reviewer two slightly different stories. Resolve the change names in this order, stopping at the first hit:
+The change's proposal, design and tasks were already written to explain this work, so reuse them instead of re-summarizing the diff. That keeps the PR faithful to what was planned and spares the reviewer two slightly different stories. Use the change names resolved in step 2b (re-run that lookup if you skipped straight here).
 
-1. `docs/changes/*/state.yaml` whose `branch:` equals the current branch. Its `openspec_changes:` list holds the names. (The change name usually differs from the ticket ID, so don't guess it from the branch name.) Also read `ticket_id`, `title` and `feature_ids` from it.
-2. Otherwise, changes touched by this branch: `git diff <base>...HEAD --name-only | grep '^openspec/changes/'`, taking the directory name after `changes/` (or after `changes/archive/<date>-`).
-3. Otherwise, an `openspec/changes/<name>/` that is untracked or modified in the working tree.
-
-For each name, the files live at `openspec/changes/<name>/`, or at `openspec/changes/archive/<date>-<name>/` if it was already archived. If nothing resolves, go to 5b.
+Because of step 2b the files normally live at `openspec/changes/archive/<date>-<name>/`. Fall back to `openspec/changes/<name>/` if archiving was skipped. Point the "OpenSpec change" footer at whichever path actually exists. If no change resolved, go to 5b.
 
 Read `proposal.md`, `tasks.md`, `design.md` and the `specs/**/spec.md` deltas, and compose:
 
 ```markdown
 ## Summary
+
 <the proposal's "Why", condensed to 1–3 sentences>
 
 ## What changed
+
 <the proposal's "What Changes" bullets, kept close to verbatim>
 
 ## Specs
+
 - `<capability path>` — <new | modified>, one line each from the `specs/` deltas
 
 ## Design notes
+
 <2–4 bullets: key decisions and non-obvious trade-offs; omit if there's no design.md>
 
 ## Test plan (per tasks.md)
+
 <derived from tasks.md, see below>
 
 **OpenSpec change:** `openspec/changes/<name>/` · **Ticket:** <ticket_id, if any>
@@ -108,9 +132,11 @@ Use a plain body:
 
 ```markdown
 ## Summary
+
 - What changed and why, 1–3 bullets
 
 ## Test plan
+
 - [ ] How it was verified (commands run, what to check)
 ```
 
@@ -129,4 +155,4 @@ Add any PR-description attribution line the session's instructions call for. Use
 
 ## 6. Report
 
-Give the user the PR URL, the branch name, which OpenSpec change(s) the body came from (or that none were found), and one line on anything you deliberately left out of the commit. If `gh` isn't authenticated, tell them to run `! gh auth login` themselves rather than trying to work around it.
+Give the user the PR URL, the branch name, which OpenSpec change(s) the body came from (or that none were found) and whether you archived them or skipped archiving (and why), and one line on anything you deliberately left out of the commit. If `gh` isn't authenticated, tell them to run `! gh auth login` themselves rather than trying to work around it.
