@@ -9,7 +9,7 @@ Four independent concerns share the `devops` feature bucket: a runtime observabi
 **Tracing:**
 - **Configuration layer**: `src/types.ts` defines `ConfigSchema`, including `tracing`; `src/config.ts` loads/normalizes config and exposes `isTracingEnabled()`/`getLvDbPath()`.
 - **Mastra runtime layer**: `src/mastra/index.ts` creates the shared `Mastra` instance, the LibSQL storage, and the observability wiring, plus `registerAgent()`.
-- **Agent layer**: `src/cli/start.ts` is now the only agent-construction site — `featureMatchAgent`/`featureSplitAgent`, module-level throwaway single-shot `Agent` instances registered via `registerAgent()`. `lv bootstrap` (`src/cli/bootstrap.ts`) constructs no agent of its own.
+- **Agent layer**: `src/engine/feature-matching.ts` (`featureMatchAgent`/`featureSplitAgent`) and `src/engine/task-splitting.ts` (`taskSplitAgent`) are the agent-construction sites — module-level throwaway single-shot `Agent` instances registered via `registerAgent()`. `lv bootstrap` (`src/cli/bootstrap.ts`) constructs no agent of its own.
 
 **npm publishing (metadata):**
 - **Package metadata layer**: `package.json` (`license`, `repository`, `keywords`, `publishConfig`, `files`, `scripts.prepublishOnly`, `engines.node`) — no source code involved, purely npm-tooling configuration.
@@ -20,7 +20,8 @@ Four independent concerns share the `devops` feature bucket: a runtime observabi
 - **Trigger/workflow layer**: `.github/workflows/archive-on-merge.yml`, a single `archive-and-sync` job on `pull_request: closed`, gated by `github.event.pull_request.merged == true && github.event.pull_request.base.ref == github.event.repository.default_branch`.
 - **Resolution layer**: `scripts/ci/resolve-merged-change.mjs`, a standalone Node script (plain Node + `js-yaml`) invoked as a workflow step. It reads `docs/changes/*/state.yaml` directly and writes `change-id`/`openspec-changes`/`feature-ids` to `$GITHUB_OUTPUT`.
 - **Archive layer**: the OpenSpec CLI, installed pinned to the root `.openspec-version` file, invoked as `openspec archive "<name>" --yes --json` per resolved change name.
-- **Doc-refresh layer**: the Claude Code CLI, authenticated via the `CLAUDE_CODE_OAUTH_TOKEN` secret, invoked as `claude -p "..."` per resolved feature ID to run the `lv-bootstrap` skill headlessly.
+- **PATH-exposure layer**: after `npm run build`, a shell wrapper is written directly to `/usr/local/bin/lv` (`exec node "$GITHUB_WORKSPACE/dist/index.js" "$@"`), giving the next step's `claude -p` subprocess a deterministic, always-on-`PATH` `lv` — not `npm link`, whose install location depends on npm's global prefix.
+- **Doc-refresh layer**: the Claude Code CLI, authenticated via the `CLAUDE_CODE_OAUTH_TOKEN` secret, invoked as `claude -p "..."` per resolved feature ID (with `--allowedTools "Bash(lv bootstrap:*) Read Glob Grep Write Edit"`) to run the `lv-bootstrap` skill headlessly.
 - **Commit layer**: stages `openspec/` and `docs/`, commits under `github-actions[bot]` only if the staged diff is non-empty, pushes, retries once with `git pull --rebase` on a push conflict.
 
 **CI release-to-npm:**
@@ -90,6 +91,7 @@ Four independent concerns share the `devops` feature bucket: a runtime observabi
 - Headless doc refresh authenticated via `claude setup-token`'s long-lived `CLAUDE_CODE_OAUTH_TOKEN`, not `ANTHROPIC_API_KEY` — matches an existing Claude subscription rather than metered API billing.
 - Direct push to the default branch, skip if nothing changed, with one rebase-and-retry on a push conflict — chosen over opening a follow-up PR to keep the loop fully automated.
 - Idempotency via directory-existence check before archiving a given change name.
+- Fixed-path wrapper script over `npm link` to expose `lv` on `PATH` for the headless step: `npm link`'s install location depends on npm's global prefix, which isn't guaranteed to be on `PATH` for the `claude -p` subprocess. When it wasn't, the agent fell back to alternatives (`npm run dev`, `npx tsx`, `node -e`) that don't match the narrow `Bash(lv bootstrap:*)` allow-rule and got denied every time. Writing `#!/usr/bin/env bash\nexec node "$GITHUB_WORKSPACE/dist/index.js" "$@"` straight to `/usr/local/bin/lv` sidesteps the global-prefix question entirely (fixed in #24, after this workflow's initial `npm link` version shipped).
 
 **CI release-to-npm:**
 - Trigger on `release: { types: [published] }`, not `push: { tags: 'v*' }` — chosen so every publish goes through GitHub's Release UI/`gh release create`, giving each release a human-readable changelog entry and a single object that both triggers CI and documents the release; a bare tag push would lose the Release-notes artifact.
