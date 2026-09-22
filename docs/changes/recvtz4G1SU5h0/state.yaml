@@ -12,4 +12,5 @@ feature_ids:
 branch: feature/recvtz4G1SU5h0-setup-a-github-action-or-automation-to-automatical
 created_at: '2026-09-22T08:26:19.131Z'
 lv_version: 0.1.0
-openspec_changes: []
+openspec_changes:
+  - auto-archive-sync-on-merge
