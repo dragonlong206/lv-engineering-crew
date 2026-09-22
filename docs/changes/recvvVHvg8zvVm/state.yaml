@@ -11,4 +11,5 @@ feature_ids:
 branch: feature/recvvVHvg8zvVm-lv-start-can-split-big-task-to-smaller-sub-tasks
 created_at: '2026-09-22T07:31:12.524Z'
 lv_version: 0.1.0
-openspec_changes: []
+openspec_changes:
+  - lv-start-task-splitting

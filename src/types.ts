@@ -71,12 +71,26 @@ export const LarkConfigSchema = z.object({
   // it isn't already set to that value. Requires the app's tenant token to carry Bitable
   // write scope.
   sync_status: z.boolean().default(true),
+  // Column holding a sub-ticket's link back to its parent ticket (a Bitable Link field on the
+  // same ticket table `lv start` reads from). Unset skips writing the relationship when a
+  // ticket is split into sub-tasks — the sub-tickets are still created either way.
+  subtask_parent_field: z.string().optional(),
 });
 
 export const ModelsConfigSchema = z.object({
   bootstrap: z.string().optional(),
 });
 export type ModelsConfig = z.infer<typeof ModelsConfigSchema>;
+
+// Controls `lv start <ticket-id>`'s pre-branch complexity analysis — whether a ticket looks
+// too large/complex to implement as a single change, and should be split into sub-tickets
+// instead. Not nested under `lark:` because the analysis itself only reads the ticket's
+// title/description; only the resulting sub-ticket creation talks to Lark.
+export const TaskSplittingConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  threshold_hours: z.number().positive().default(4),
+});
+export type TaskSplittingConfig = z.infer<typeof TaskSplittingConfigSchema>;
 
 // `apply_model` is a Claude Code model alias/id (e.g. "haiku"), consumed by `lv init` to pin the
 // generated `/opsx:apply` command's frontmatter — a different runtime and value format from
@@ -100,6 +114,9 @@ export const ConfigSchema = z.object({
   model: z.string().default("openai/gpt-4o"),
   models: ModelsConfigSchema.optional(),
   tracing: TracingConfigSchema.optional(),
+  // Whether/how `lv start <ticket-id>` analyzes a ticket for complexity before creating a
+  // branch, and offers to split it into sub-tickets. Omit for the defaults (enabled, 4h).
+  task_splitting: TaskSplittingConfigSchema.optional(),
   // `.nullish()`, not `.optional()`: a `.lv.yaml` block with every child commented out (as the
   // shipped template's `openspec:` is by default) parses as `openspec: null`, not a missing key.
   openspec: OpenSpecConfigSchema.nullish(),

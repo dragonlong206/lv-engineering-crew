@@ -103,6 +103,24 @@ export async function promptResumeOrRestart(branchName: string): Promise<'resume
   return choice === 1 ? 'resume' : 'restart';
 }
 
+/**
+ * Presents a suggested whole-ticket split (reason + each sub-task's title/description) and asks
+ * a single accept-or-decline question — unlike `confirmSelection()`/`confirmFeatureSplit()`,
+ * there's no per-item narrowing here: a sub-task carries a description as well as a title, so
+ * editing the set via a comma-separated reply doesn't transfer, and accepting only part of a
+ * split ticket would silently drop scope from the original ticket. See design.md's Decisions.
+ */
+export async function confirmTaskSplit(
+  reason: string,
+  subtasks: { title: string; description: string }[],
+): Promise<boolean> {
+  console.log(`This ticket looks like it should be split: ${reason}`);
+  console.log(`Suggested sub-tasks:`);
+  subtasks.forEach((s, i) => console.log(`  ${i + 1}) ${s.title}\n     ${s.description}`));
+
+  return confirm(`Create these ${subtasks.length} sub-task(s) and stop here? [y/N] `);
+}
+
 export function openEditor(filePath: string): void {
   const editor =
     process.env['EDITOR'] ??

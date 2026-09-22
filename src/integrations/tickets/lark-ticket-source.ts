@@ -6,6 +6,7 @@ import {
   downloadTicketAttachments,
   updateTicketFeatureId,
   updateTicketStatus,
+  createSubticket,
   type LarkTicket,
 } from '../../tools/lark.js';
 import { printInfo, printSuccess, printWarn, printError } from '../../cli/helpers.js';
@@ -152,6 +153,38 @@ export function createLarkTicketSource(config: Config): LarkTicketSourceHandle {
           `Failed to update ticket ${ticket.id} status to "${config.lark.in_dev_status_value}": ${(err as Error).message}. Continuing.`,
         );
       }
+    },
+
+    async createSubtickets(parent, subtasks) {
+      if (!config.lark.subtask_parent_field) {
+        printWarn(
+          `lark.subtask_parent_field is unset — sub-tickets will be created without a recorded link back to ${parent.id}.`,
+        );
+      }
+
+      const token = await getToken();
+      const created: { id: string; title: string }[] = [];
+      const failed: { title: string; error: string }[] = [];
+
+      for (const subtask of subtasks) {
+        try {
+          const id = await createSubticket(
+            subtask.title,
+            subtask.description,
+            parent.id,
+            config.lark.base_id,
+            config.lark.table_id,
+            config.lark.title_field,
+            token,
+            config.lark.subtask_parent_field,
+          );
+          created.push({ id, title: subtask.title });
+        } catch (err) {
+          failed.push({ title: subtask.title, error: (err as Error).message });
+        }
+      }
+
+      return { created, failed };
     },
   };
 }

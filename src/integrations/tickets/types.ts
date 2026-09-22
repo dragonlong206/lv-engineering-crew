@@ -45,4 +45,17 @@ export interface TicketSource {
     featureRecordIds: Map<string, string>,
   ): Promise<void>;
   updateStatus(ticket: Ticket): Promise<void>;
+  /**
+   * Creates one new ticket record per given sub-task (title + description), linked back to
+   * `parent` when the source supports recording that relationship. Best-effort per sub-task —
+   * same non-fatal posture as `updateFeatureId`/`updateStatus`: one sub-task's creation failing
+   * is reported in `failed` rather than throwing and losing the rest.
+   */
+  createSubtickets(
+    parent: Ticket,
+    subtasks: { title: string; description: string }[],
+  ): Promise<{
+    created: { id: string; title: string }[];
+    failed: { title: string; error: string }[];
+  }>;
 }

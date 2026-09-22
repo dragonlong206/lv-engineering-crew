@@ -612,6 +612,66 @@ export async function syncFeatureToLarkTable(
   }
 }
 
+/**
+ * Creates a new record in the ticket table itself for one sub-task of a ticket being split
+ * (`lv start`'s task-splitting flow), populated with the sub-task's title and description and,
+ * when `subtaskParentField` is given, a link back to the parent ticket's record. Parallel to
+ * `createFeatureRecord()`, but targets the ticket table (`tableId`/`titleField` are the same
+ * ones `fetchTicket()` reads from) rather than a separate Features table, and writes
+ * `'Description'` directly rather than a config-driven field name — `fetchTicket()` itself has
+ * no configurable description-field name to mirror (it reads `'Description'`/`'description'`
+ * directly), so there's nothing to read from config here either.
+ *
+ * Returns the created record's `record_id`. Throws on failure — non-fatal per-sub-task handling
+ * happens at the call site (`LarkTicketSource.createSubtickets()`), same split of
+ * responsibility as `createFeatureRecord()` vs. `syncFeatureToLarkTable()`.
+ */
+export async function createSubticket(
+  title: string,
+  description: string,
+  parentTicketId: string,
+  baseId: string,
+  tableId: string,
+  titleField: string,
+  token: string,
+  subtaskParentField?: string,
+): Promise<string> {
+  const fields: Record<string, unknown> = {
+    [titleField]: title,
+    Description: description,
+  };
+  if (subtaskParentField) {
+    fields[subtaskParentField] = [parentTicketId];
+  }
+
+  const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify({ fields }),
+  });
+
+  const data = (await response.json()) as {
+    code: number;
+    msg?: string;
+    data?: { record?: { record_id?: string } };
+  };
+
+  if (!response.ok || data.code !== 0) {
+    throw new Error(`Lark create error ${data.code ?? response.status}: ${data.msg ?? 'unknown error'}`);
+  }
+
+  const recordId = data.data?.record?.record_id;
+  if (!recordId) {
+    throw new Error('Lark create error: response was missing the created record_id');
+  }
+  return recordId;
+}
+
 export const larkTicketTool = createTool({
   id: 'fetchLarkTicket',
   description: 'Fetch a ticket record from Lark Base',
