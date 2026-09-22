@@ -1,0 +1,13 @@
+ticket_id: recvtwgoCjIfjL
+title: Refactor `lv start` function to make it SOLID
+description: >-
+  lv start currently contains alot of code in a single function. Need to
+  refactor to make it SOLID and especially easy to integrate with other ticket
+  system than Lark.
+feature_ids:
+  - lv-start
+branch: feature/recvtwgoCjIfjL-refactor-lv-start-function-to-make-it-solid
+created_at: '2026-09-22T06:35:11.160Z'
+lv_version: 0.1.0
+openspec_changes:
+  - refactor-lv-start-function-to-make-it-solid
