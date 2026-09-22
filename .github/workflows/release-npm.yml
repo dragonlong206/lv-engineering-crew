@@ -1,0 +1,61 @@
+name: Release to npm
+
+# Publishes lv-engineer-crew to the public npm registry when a maintainer
+# publishes a GitHub Release. Authenticates via npm Trusted Publishing (OIDC)
+# — no npm token or GitHub secret is involved. See:
+# openspec/changes/setup-ci-cd-to-release-to-npm/{proposal.md,design.md}
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out released commit
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Runs CI on Node 24 even though package.json's engines.node
+          # (">=20.0.0") allows older Node for local/install use.
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release tag matches package.json version
+        run: |
+          set -euo pipefail
+          tag="${{ github.event.release.tag_name }}"
+          tag_version="${tag#v}"
+          pkg_version="$(node -p "require('./package.json').version")"
+          if [ "$tag_version" != "$pkg_version" ]; then
+            echo "Release tag '$tag' (version '$tag_version') does not match package.json version '$pkg_version'." >&2
+            exit 1
+          fi
+          echo "Release tag version '$tag_version' matches package.json."
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Upgrade npm for Trusted Publishing (OIDC) support
+        run: |
+          set -euo pipefail
+          # Ensures npm is >= 11.5.1 (required for OIDC Trusted Publishing)
+          # regardless of exactly which npm the runner's Node build bundles.
+          npm install -g npm@latest
+          npm --version
+
+      - name: Publish to npm
+        run: npm publish

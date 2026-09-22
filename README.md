@@ -176,6 +176,37 @@ claude setup-token   # generates a long-lived OAuth token from your Claude subsc
 
 Store the printed token as the `CLAUDE_CODE_OAUTH_TOKEN` repo secret (Settings → Secrets and variables → Actions). If the token expires or is revoked, the workflow's doc-refresh step fails visibly (rather than silently skipping the feature-doc refresh) — re-run `claude setup-token` and update the secret to re-authenticate.
 
+## CI: publish to npm on release
+
+`.github/workflows/release-npm.yml` runs whenever a GitHub Release is published. It:
+
+1. Checks out the exact commit the release tag points at.
+2. Installs dependencies (`npm ci`) and verifies the release tag matches `package.json`'s `version` field, failing before any build/publish step if they differ.
+3. Type-checks (`npx tsc --noEmit`) and builds (`npm run build`) — the same verification this repo's `CLAUDE.md` prescribes for a human doing this manually.
+4. Publishes to the public npm registry (`npm publish`).
+
+**Cutting a release** — as a maintainer:
+
+```bash
+npm version patch   # or minor / major — bumps package.json and creates a git tag
+git push --follow-tags
+```
+
+Then publish a GitHub Release for that tag (via the GitHub UI, or `gh release create`). Publishing the Release is what triggers the workflow — pushing the tag alone does not.
+
+**Authentication — npm Trusted Publishing (OIDC), no token or secret required.** The workflow authenticates via [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers), not a stored `NPM_TOKEN`: npm is removing the "bypass 2FA" option on classic Automation tokens that a non-interactive CI publish would otherwise need, and Trusted Publishing is npm's replacement — GitHub Actions exchanges a short-lived, workflow-scoped OIDC identity for registry access at publish time, with nothing long-lived to store or rotate.
+
+One-time setup on npmjs.com, as a maintainer with publish access to `lv-engineer-crew`:
+
+1. Go to the package's page → **Settings** → **Publishing access**.
+2. Add a **GitHub Actions** trusted publisher with:
+   - Organization or user: this repo's owner
+   - Repository: this repo's name
+   - Workflow filename: `release-npm.yml`
+3. No GitHub repository secret needs to be created — the workflow already declares the `id-token: write` permission Trusted Publishing needs.
+
+If the Trusted Publisher entry is missing, or its repo/workflow values don't match, the `npm publish` step fails visibly with an authentication error rather than silently skipping the publish.
+
 ## Commands
 
 ### `lv init [--tool <tool>]`
