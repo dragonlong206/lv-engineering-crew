@@ -5,14 +5,10 @@ CLI tool for spec-driven development with human-in-the-loop. LV hands the ticket
 ## Get started
 
 ```bash
-git clone <repo>
-cd lv-engineer-crew
-npm install
-npm run build
-npm link                          # installs the `lv` binary globally
+npm install -g lv-engineer-crew   # installs the `lv` binary globally
 
 cd /path/to/target-repo
-cp /path/to/lv-engineer-crew-repo/.lv.local.yaml.sample .lv.local.yaml   # then fill in configs and real credentials — file is gitignored — see Configuration below
+# create .lv.local.yaml with your credentials — see Configuration below
 lv init --tool claude             # install/configure OpenSpec, wire it to LV's context
 lv bootstrap <feature-id> --description "feature description"  # generate feature docs from an existing codebase that doesn't have any yet
 lv start <ticket-id>             #  fetch the ticket from Lark, create docs/changes/<ticket-id>/state.yaml
@@ -21,6 +17,8 @@ lv start --description "..."     #  create docs/changes/<change-id>/state.yaml f
 ```
 
 Then continue with your coding agent's OpenSpec workflow (e.g. `/opsx:propose`) — see [Workflow](#workflow-phase-1) below for the full loop, [Installation](#installation) and [Configuration](#configuration) for details, and [Commands](#commands) for the full command reference.
+
+Working on `lv` itself rather than just using it? See [Installation](#installation) below for the source-build path.
 
 ## Workflow (phase 1)
 
@@ -44,12 +42,20 @@ Coming back to a change later (after a break, or on a different machine)? Run `l
 
 Requires: Node.js >= 20
 
+**As a user** — install the published package from npm:
+
+```bash
+npm install -g lv-engineer-crew   # installs the `lv` binary globally
+```
+
+**As a contributor** — build `lv` from source instead:
+
 ```bash
 git clone <repo>
 cd lv-engineer-crew
 npm install
 npm run build
-npm link   # install lv globally
+npm link   # install lv globally, pointing at your local build
 ```
 
 ## Configuration

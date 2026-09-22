@@ -3,13 +3,33 @@
   "version": "0.1.0",
   "description": "AI-assisted spec-driven development CLI",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dragonlong206/lv-engineering-crew.git"
+  },
+  "keywords": [
+    "cli",
+    "spec-driven-development",
+    "openspec",
+    "ai-agent"
+  ],
   "bin": {
-    "lv": "./dist/index.js"
+    "lv": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts",
     "dev": "tsx src/index.ts",
-    "mastra": "mastra dev"
+    "mastra": "mastra dev",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

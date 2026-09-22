@@ -1,0 +1,12 @@
+ticket_id: recvupmz8I8Fhe
+title: >-
+  Publish on a package registry and modify readme to guide user install the
+  package
+description: ''
+feature_ids:
+  - devops
+branch: feature/recvupmz8I8Fhe-publish-on-a-package-registry-and-modify-readme-to
+created_at: '2026-09-16T05:17:33.573Z'
+lv_version: 0.1.0
+openspec_changes:
+  - publish-npm-package-and-update-readme
