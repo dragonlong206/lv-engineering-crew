@@ -57,7 +57,20 @@ lark:
   # ticket's status untouched.
   # sync_status: true
 
+  # Column holding a sub-ticket's link back to its parent ticket (a Bitable
+  # Link field on this same ticket table). Used when `lv start` splits a
+  # ticket into sub-tasks (see task_splitting below). Unset still creates the
+  # sub-tickets, just without recording the parent relationship.
+  # subtask_parent_field: "Parent Task"
+
 default_branch: main
+
+# `lv start <ticket-id>`'s pre-branch complexity analysis — whether a ticket
+# looks too large/complex for a single change and should be split into
+# sub-tickets instead. Omit for the defaults shown below.
+# task_splitting:
+#   enabled: true
+#   threshold_hours: 4
 
 # Branch naming per type — {ticket_id} and {summary} are the only placeholders
 # ({summary} is a slug of the ticket title, filled in by `lv start`). Omit to

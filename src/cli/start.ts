@@ -21,6 +21,7 @@ import {
   confirmFeatureMatches,
 } from "../engine/feature-matching.js";
 import { resolveExistingBranch } from "../engine/branch-resolution.js";
+import { analyzeTaskComplexity } from "../engine/task-splitting.js";
 import { generateFeatureDocsPlaceholder } from "./bootstrap.js";
 import { createLarkTicketSource } from "../integrations/tickets/lark-ticket-source.js";
 import {
@@ -30,6 +31,7 @@ import {
   printWarn,
   confirm,
   confirmFeatureSplit,
+  confirmTaskSplit,
 } from "./helpers.js";
 import { LV_VERSION, type State } from "../types.js";
 
@@ -79,6 +81,44 @@ async function startFromTicket(
 
   const source = createLarkTicketSource(config);
   const ticket = await source.fetch(ticketId);
+
+  if (config.task_splitting?.enabled !== false) {
+    const thresholdHours = config.task_splitting?.threshold_hours ?? 4;
+    const suggestion = await analyzeTaskComplexity(
+      config,
+      ticket.title,
+      ticket.description,
+      thresholdHours,
+    );
+
+    if (suggestion.shouldSplit) {
+      const confirmed = await confirmTaskSplit(suggestion.reason, suggestion.subtasks);
+      if (confirmed) {
+        const { created, failed } = await source.createSubtickets(
+          ticket,
+          suggestion.subtasks,
+        );
+
+        if (created.length > 0) {
+          console.log(`\nCreated ${created.length} sub-task(s):`);
+          for (const sub of created) {
+            console.log(`  ${sub.id} — ${sub.title}`);
+          }
+        }
+        for (const failure of failed) {
+          printWarn(`Failed to create sub-task '${failure.title}': ${failure.error}.`);
+        }
+
+        console.log(
+          `\nStart each sub-task with 'lv start <sub-ticket-id>' — one at a time, or in parallel across separate branches/coding-agent sessions.`,
+        );
+        printInfo(
+          `Stopped without creating a branch for ${ticketId} — its work now lives in the sub-task(s) above.`,
+        );
+        return;
+      }
+    }
+  }
 
   let downloadedAttachmentPaths: string[] = [];
   if (ticket.attachments.length > 0) {

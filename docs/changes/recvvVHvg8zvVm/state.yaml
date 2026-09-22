@@ -1,0 +1,15 @@
+ticket_id: recvvVHvg8zvVm
+title: '`lv start` can split big task to smaller sub-tasks'
+description: >-
+  `lv start` can analyze the task first, if it is too complicated, contains
+  multiple separated tasks or takes too much time to implement (> 4 hours) then
+  it suggest to human to split to sub tasks. If human agrees, it creates the sub
+  tasks, sync them to ticket system with relationship and then guide user to
+  start one by one or create an agent team to start parallel if possible
+feature_ids:
+  - lv-start
+branch: feature/recvvVHvg8zvVm-lv-start-can-split-big-task-to-smaller-sub-tasks
+created_at: '2026-09-22T07:31:12.524Z'
+lv_version: 0.1.0
+openspec_changes:
+  - lv-start-task-splitting

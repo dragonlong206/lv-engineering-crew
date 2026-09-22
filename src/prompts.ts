@@ -222,6 +222,31 @@ Return ONLY strict JSON matching this shape — no surrounding text, no code fen
 }
 
 // ---------------------------------------------------------------------------
+// Start — analyze whether a ticket should be split into sub-tasks
+// ---------------------------------------------------------------------------
+
+export function buildTaskSplitPrompt(
+  title: string,
+  description: string,
+  thresholdHours: number,
+): string {
+  return `You are assessing whether a project change is too large or complex to implement as a single change, and should instead be split into smaller sub-tasks.
+
+## Change
+
+Title: ${title}
+Description: ${description || "(none)"}
+
+Recommend splitting only when the title/description clearly describes multiple distinct, separately-shippable pieces of work — not just multiple steps of one coherent task — or when the work would plausibly take longer than ${thresholdHours} hours to implement as a single change. Most changes should NOT be split. When in doubt, do not recommend splitting.
+
+If you recommend splitting, give each sub-task a short, specific title and a one- or two-sentence description of what it covers; the sub-tasks together should cover the full scope of the original change.
+
+Return ONLY strict JSON matching this shape — no surrounding text, no code fences:
+{"shouldSplit": false, "reason": "<short explanation of the verdict either way>", "subtasks": [{"title": "<short sub-task title>", "description": "<what this sub-task covers>"}]}
+("subtasks" must be an empty array when "shouldSplit" is false.)`;
+}
+
+// ---------------------------------------------------------------------------
 // OpenSpec init — instructional text written into openspec/config.yaml
 // ---------------------------------------------------------------------------
 
