@@ -155,6 +155,27 @@ openspec/
 
 `<change-id>` is a ticket ID for ticket-based starts, or a slug derived from the description for description-based ones — the same name identifies both `docs/changes/<change-id>/` and the OpenSpec change under `openspec/changes/<change-id>/`.
 
+## CI: archive & doc sync on merge
+
+`.github/workflows/archive-on-merge.yml` runs whenever a PR is merged into the repo's default branch. It:
+
+1. Resolves the merged branch to its `docs/changes/<change-id>/state.yaml`, via `scripts/ci/resolve-merged-change.mjs` (no match → the run exits cleanly and makes no changes).
+2. Archives and syncs every OpenSpec change listed in that state's `openspec_changes`, non-interactively (`openspec archive --yes --json`) — already-archived changes are skipped.
+3. Refreshes `docs/features/<id>/{overview.md,design.md}` for every feature ID in `feature_ids`, by running the `lv-bootstrap` skill headlessly through the Claude Code CLI (`claude -p`).
+4. Commits the result **directly to the default branch** (no PR, no required review) — a bot commit under `github-actions[bot]`, or nothing at all if there was nothing to sync.
+
+This is fully automated by design; review generated changes after the fact via `git log`/`git show` rather than before they land.
+
+**Pinning the OpenSpec CLI version** — the workflow installs the OpenSpec CLI pinned to whatever version is in the root `.openspec-version` file (a single line, e.g. `1.12.0`), instead of `latest`, so CI's archive/sync behaves the same as your local `openspec archive`/`/opsx:archive` runs. Whenever you intentionally upgrade your local OpenSpec CLI, check the new version (`openspec --version`) and bump `.openspec-version` to match in the same PR.
+
+**Setting up the Claude Code credential** — the doc-refresh step authenticates as a Claude subscription (Pro/Max/Team/Enterprise), not an API key:
+
+```bash
+claude setup-token   # generates a long-lived OAuth token from your Claude subscription
+```
+
+Store the printed token as the `CLAUDE_CODE_OAUTH_TOKEN` repo secret (Settings → Secrets and variables → Actions). If the token expires or is revoked, the workflow's doc-refresh step fails visibly (rather than silently skipping the feature-doc refresh) — re-run `claude setup-token` and update the secret to re-authenticate.
+
 ## Commands
 
 ### `lv init [--tool <tool>]`

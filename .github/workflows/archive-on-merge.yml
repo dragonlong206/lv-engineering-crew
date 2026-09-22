@@ -1,0 +1,89 @@
+name: Archive on merge
+
+# Resolves a merged PR's linked OpenSpec change(s) and feature IDs from
+# docs/changes/<change-id>/state.yaml, archives/syncs those changes, refreshes
+# their feature docs via a headless lv-bootstrap run, and commits the result
+# directly to the default branch. See:
+# openspec/changes/auto-archive-sync-on-merge/{proposal.md,design.md}
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  archive-and-sync:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Matches package.json's engines.node (">=20.0.0").
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve merged change
+        id: resolve
+        run: node scripts/ci/resolve-merged-change.mjs "${{ github.event.pull_request.head.ref }}"
+
+      - name: Archive and sync linked OpenSpec change(s)
+        if: steps.resolve.outputs.openspec-changes != '[]'
+        run: |
+          set -euo pipefail
+          npm install -g @fission-ai/openspec@"$(cat .openspec-version)"
+          echo '${{ steps.resolve.outputs.openspec-changes }}' | jq -r '.[]' | while IFS= read -r name; do
+            if [ -d "openspec/changes/$name" ]; then
+              echo "Archiving OpenSpec change: $name"
+              openspec archive "$name" --yes --json
+            else
+              echo "Skipping '$name' — already archived."
+            fi
+          done
+
+      - name: Build and link lv (for the lv-bootstrap skill's own lv bootstrap calls)
+        if: steps.resolve.outputs.feature-ids != '[]'
+        run: |
+          npm run build
+          npm link
+
+      - name: Refresh feature docs via headless lv-bootstrap
+        if: steps.resolve.outputs.feature-ids != '[]'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          npm install -g @anthropic-ai/claude-code
+          echo '${{ steps.resolve.outputs.feature-ids }}' | jq -r '.[]' | while IFS= read -r feature_id; do
+            echo "Refreshing docs for feature: $feature_id"
+            claude -p "Use the lv-bootstrap skill to refresh docs/features/${feature_id}/overview.md and docs/features/${feature_id}/design.md. Follow the skill's own instructions exactly, including running 'lv bootstrap ${feature_id} --context' first and finishing with 'lv bootstrap ${feature_id} --finalize --title \"<feature title>\"'." \
+              --add-dir "$(pwd)" \
+              --allowedTools "Bash(lv bootstrap:*) Read Glob Grep Write Edit"
+          done
+
+      - name: Commit and push archived state and refreshed docs
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- openspec/ docs/
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "chore: auto-archive and sync docs for merged change(s)"
+          if ! git push; then
+            echo "Push rejected — retrying once after rebase."
+            git pull --rebase origin "${{ github.event.repository.default_branch }}"
+            git push
+          fi
