@@ -51,11 +51,17 @@ jobs:
             fi
           done
 
-      - name: Build and link lv (for the lv-bootstrap skill's own lv bootstrap calls)
+      - name: Build lv and expose it on PATH (for the lv-bootstrap skill's own lv bootstrap calls)
         if: steps.resolve.outputs.feature-ids != '[]'
         run: |
+          set -euo pipefail
           npm run build
-          npm link
+          # A deterministic wrapper at a fixed, always-on-PATH location, rather than
+          # `npm link` (whose target directory depends on npm's global prefix, which
+          # isn't guaranteed to already be on PATH for the next step's subprocesses).
+          printf '#!/usr/bin/env bash\nexec node "%s/dist/index.js" "$@"\n' "$GITHUB_WORKSPACE" | sudo tee /usr/local/bin/lv > /dev/null
+          sudo chmod +x /usr/local/bin/lv
+          lv --version
 
       - name: Refresh feature docs via headless lv-bootstrap
         if: steps.resolve.outputs.feature-ids != '[]'
