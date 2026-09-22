@@ -1,0 +1,15 @@
+ticket_id: recvtz4G1SU5h0
+title: >-
+  Setup a github action or automation to automatically run OpenSpec archive and
+  sync feature docs when PR is merged
+description: >-
+  Skip the interactive mode, auto sync specs and feature docs.
+
+  Also add the guide to README.md to guide users how to setup the same openspec
+  version in action runner to avoid conflicts.
+feature_ids:
+  - devops
+branch: feature/recvtz4G1SU5h0-setup-a-github-action-or-automation-to-automatical
+created_at: '2026-09-22T08:26:19.131Z'
+lv_version: 0.1.0
+openspec_changes: []
