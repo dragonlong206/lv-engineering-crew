@@ -32,3 +32,19 @@ operations:
         of this change's delta spec capability paths, treat its leading path
         segment as a feature ID and refresh it if a matching
         `docs/features/<id>/` directory exists.
+  apply:
+    guidance:
+      - >-
+        When implementing, write automated tests covering each `#### Scenario:`
+        in this change's delta specs, following this repo's existing test
+        framework, test file locations, and naming conventions (discover them
+        from the existing test suite rather than choosing your own), and run
+        those tests before marking the related tasks complete. If this repo has
+        no automated test framework, do not introduce one unless this change's
+        tasks explicitly call for it; instead, report which delta spec scenarios
+        remain without automated coverage. If this change has no delta spec
+        scenarios, this guidance asks for nothing spec-specific.
+
+rules:
+  tasks:
+    - "Include explicit tasks for writing automated tests that cover the `#### Scenario:` blocks in this change's delta specs, using this repo's existing test framework and conventions; each such task must name the scenario(s) it covers. If this repo has no automated test framework, plan manual or scripted verification steps per scenario instead of tasks that introduce a new framework."

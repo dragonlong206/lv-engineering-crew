@@ -1,0 +1,10 @@
+ticket_id: recvwwR5LHOqXo
+title: OpenSpec Apply should implement tests following change specs
+description: ''
+feature_ids:
+  - lv-init
+branch: feature/recvwwR5LHOqXo-openspec-apply-should-implement-tests-following-ch
+created_at: '2026-09-28T15:28:15.450Z'
+lv_version: 0.1.0
+openspec_changes:
+  - openspec-apply-implement-spec-tests

@@ -11,6 +11,8 @@ import {
   LEGACY_CONTEXT_POINTER_SYNC_LINE,
   ARCHIVE_GUIDANCE,
   LEGACY_ARCHIVE_GUIDANCE,
+  APPLY_TEST_GUIDANCE,
+  TASKS_TEST_RULE,
   PROPOSE_STATE_AUTOLOAD_LINE,
   PROPOSE_LINK_CHANGE_LINE,
   PROPOSE_UI_DESIGN_LINE,
@@ -98,7 +100,11 @@ export async function runInit(opts: InitOptions): Promise<void> {
   }
 
   addContextPointer(repoRoot);
-  addArchiveGuidance(repoRoot);
+  addOperationGuidance(repoRoot, [
+    { operation: "archive", text: ARCHIVE_GUIDANCE, legacy: LEGACY_ARCHIVE_GUIDANCE },
+    { operation: "apply", text: APPLY_TEST_GUIDANCE },
+  ]);
+  addArtifactRules(repoRoot, { tasks: [TASKS_TEST_RULE] });
   addProposeStateAutoload(repoRoot);
   addProposeLinkInstruction(repoRoot);
   addProposeUiDesignInstruction(repoRoot);
@@ -181,17 +187,24 @@ function addContextPointer(repoRoot: string): void {
   fs.writeFileSync(configPath, yaml.dump(parsed, { indent: 2 }), "utf-8");
 }
 
+interface OperationGuidanceEntry {
+  operation: string;
+  text: string;
+  // Superseded wording of `text`, upgraded in place if found instead of appending `text` as a
+  // second, duplicate entry.
+  legacy?: string;
+}
+
 /**
- * Idempotently wires OpenSpec's `operations.archive.guidance` (openspec/config.yaml) so the
- * generated archive workflow is told to refresh feature docs for the archiving change before
- * completing — read via `openspec instructions archive --change <name> --json`'s
- * `operationGuidance` field, which the generated `/opsx:archive` workflow already reads and
- * follows advisorily (never blocking the archive if ignored). Also upgrades a previously-written
- * copy of `LEGACY_ARCHIVE_GUIDANCE` (the wording used before `lv bootstrap` became a
- * skill/command) to the current `ARCHIVE_GUIDANCE` in place, so a project `lv init` already ran
- * against doesn't end up with both the stale and corrected wording side by side.
+ * Idempotently wires LV's entries into OpenSpec's `operations.<id>.guidance` (openspec/config.yaml)
+ * — read via `openspec instructions <id> --change <name> --json`'s `operationGuidance` field,
+ * which the generated `/opsx:archive` and `/opsx:apply` workflows already read and follow
+ * advisorily (never blocking if ignored). Handles every operation in one pass rather than one
+ * call per operation: a first call appending a fresh `operations:` block would make the next
+ * call see an active key and take the YAML round-trip branch, stripping the template's comments
+ * on every fresh install (see design.md Decision 3 of openspec-apply-implement-spec-tests).
  */
-function addArchiveGuidance(repoRoot: string): void {
+function addOperationGuidance(repoRoot: string, entries: OperationGuidanceEntry[]): void {
   const configPath = path.join(repoRoot, "openspec", "config.yaml");
   if (!fs.existsSync(configPath)) {
     printError(`Expected OpenSpec config at ${configPath} after install — not found.`);
@@ -199,49 +212,107 @@ function addArchiveGuidance(repoRoot: string): void {
   }
 
   const raw = fs.readFileSync(configPath, "utf-8");
-  if (normalizeWhitespace(raw).includes(normalizeWhitespace(ARCHIVE_GUIDANCE))) return; // already wired
-
   const hasActiveOperationsKey = /^operations:/m.test(raw);
 
   if (!hasActiveOperationsKey) {
     // Fresh template — `operations:` only appears commented out. Append a new top-level key
     // instead of round-tripping through js-yaml, so the template's explanatory comments
-    // stay intact. JSON.stringify quotes the value as a valid YAML double-quoted scalar —
-    // required because ARCHIVE_GUIDANCE contains ": ", which is ambiguous unquoted as a
+    // stay intact. JSON.stringify quotes each value as a valid YAML double-quoted scalar —
+    // required because the guidance text contains ": ", which is ambiguous unquoted as a
     // block-sequence item (a parser reads it as an implicit single-key mapping, not a plain
     // string) and corrupts into a duplicate entry the next time this file is parsed and
-    // re-dumped (e.g. by addContextPointer()'s merge branch below).
-    const block = `\noperations:\n  archive:\n    guidance:\n      - ${JSON.stringify(ARCHIVE_GUIDANCE)}\n`;
+    // re-dumped (e.g. by addContextPointer()'s merge branch).
+    const byOperation = new Map<string, string[]>();
+    for (const { operation, text } of entries) {
+      byOperation.set(operation, [...(byOperation.get(operation) ?? []), text]);
+    }
+    let block = "\noperations:\n";
+    for (const [operation, texts] of byOperation) {
+      block += `  ${operation}:\n    guidance:\n${texts.map((t) => `      - ${JSON.stringify(t)}\n`).join("")}`;
+    }
     fs.appendFileSync(configPath, block, "utf-8");
     return;
   }
 
-  // An engineer already customized `operations:` (e.g. `apply:` guidance with no `archive:`
-  // key, or an `archive:` key with no `guidance:` list yet) — merge via YAML instead of a
-  // blind text append, building the missing intermediate keys as needed, at the cost of
-  // losing this file's comments on this one rewrite.
+  // An engineer already customized `operations:` (or an earlier `lv init` already wrote part of
+  // it) — merge via YAML instead of a blind text append, building the missing intermediate keys
+  // as needed and keeping any guidance entries LV didn't write, at the cost of losing this
+  // file's comments on this one rewrite.
   const parsed = (yaml.load(raw) as Record<string, unknown>) ?? {};
   const operations = (parsed.operations as Record<string, unknown>) ?? {};
-  const archive = (operations.archive as Record<string, unknown>) ?? {};
-  const guidance = Array.isArray(archive.guidance) ? (archive.guidance as string[]) : [];
+  let changed = false;
 
-  // Upgrade a previously-installed copy of the now-superseded wording in place, rather than
-  // leaving it stale or appending the current wording as a second, duplicate entry — matched
-  // via normalized content (not a raw substring) since YAML re-serializes this entry as a
-  // folded/wrapped block scalar, not the single-line form either constant is written as here.
-  const legacyIndex = guidance.findIndex(
-    (entry) => normalizeWhitespace(String(entry)) === normalizeWhitespace(LEGACY_ARCHIVE_GUIDANCE),
-  );
-  if (legacyIndex !== -1) {
-    guidance[legacyIndex] = ARCHIVE_GUIDANCE;
-  } else if (!guidance.some((entry) => normalizeWhitespace(String(entry)) === normalizeWhitespace(ARCHIVE_GUIDANCE))) {
-    guidance.push(ARCHIVE_GUIDANCE);
+  for (const { operation, text, legacy } of entries) {
+    const op = (operations[operation] as Record<string, unknown>) ?? {};
+    const guidance = Array.isArray(op.guidance) ? (op.guidance as string[]) : [];
+
+    // Matched via normalized content (not a raw substring) since YAML re-serializes each entry
+    // as a folded/wrapped block scalar, not the single-line form the constants are written as.
+    const matches = (candidate: string) => (entry: unknown) =>
+      normalizeWhitespace(String(entry)) === normalizeWhitespace(candidate);
+
+    if (guidance.some(matches(text))) continue; // already wired
+
+    const legacyIndex = legacy ? guidance.findIndex(matches(legacy)) : -1;
+    if (legacyIndex !== -1) {
+      guidance[legacyIndex] = text;
+    } else {
+      guidance.push(text);
+    }
+
+    op.guidance = guidance;
+    operations[operation] = op;
+    changed = true;
   }
 
-  archive.guidance = guidance;
-  operations.archive = archive;
+  if (!changed) return;
   parsed.operations = operations;
+  fs.writeFileSync(configPath, yaml.dump(parsed, { indent: 2 }), "utf-8");
+}
 
+/**
+ * Idempotently wires LV's entries into OpenSpec's per-artifact `rules.<artifact-id>`
+ * (openspec/config.yaml) — returned as `rules` by `openspec instructions <artifact-id> --json`,
+ * so each rule only constrains the one artifact it's keyed under. Same fresh-append vs.
+ * YAML-merge split as `addOperationGuidance()`, keeping any rules an engineer already wrote.
+ */
+function addArtifactRules(repoRoot: string, rules: Record<string, string[]>): void {
+  const configPath = path.join(repoRoot, "openspec", "config.yaml");
+  if (!fs.existsSync(configPath)) {
+    printError(`Expected OpenSpec config at ${configPath} after install — not found.`);
+    return;
+  }
+
+  const raw = fs.readFileSync(configPath, "utf-8");
+  const hasActiveRulesKey = /^rules:/m.test(raw);
+
+  if (!hasActiveRulesKey) {
+    // Fresh template — append instead of round-tripping through js-yaml, quoting each value
+    // for the same ": " reason as addOperationGuidance().
+    let block = "\nrules:\n";
+    for (const [artifactId, texts] of Object.entries(rules)) {
+      block += `  ${artifactId}:\n${texts.map((t) => `    - ${JSON.stringify(t)}\n`).join("")}`;
+    }
+    fs.appendFileSync(configPath, block, "utf-8");
+    return;
+  }
+
+  const parsed = (yaml.load(raw) as Record<string, unknown>) ?? {};
+  const existingRules = (parsed.rules as Record<string, unknown>) ?? {};
+  let changed = false;
+
+  for (const [artifactId, texts] of Object.entries(rules)) {
+    const list = Array.isArray(existingRules[artifactId]) ? (existingRules[artifactId] as string[]) : [];
+    for (const text of texts) {
+      if (list.some((entry) => normalizeWhitespace(String(entry)) === normalizeWhitespace(text))) continue;
+      list.push(text);
+      changed = true;
+    }
+    existingRules[artifactId] = list;
+  }
+
+  if (!changed) return;
+  parsed.rules = existingRules;
   fs.writeFileSync(configPath, yaml.dump(parsed, { indent: 2 }), "utf-8");
 }
 
