@@ -1,6 +1,92 @@
 # LV Engineer Crew
 
-CLI tool for spec-driven development with human-in-the-loop. LV hands the ticket/description context to [OpenSpec](https://github.com/Fission-AI/OpenSpec), which drives the explore → propose → spec → design → tasks → apply loop through your coding agent.
+**Turn tickets into specs, specs into code — and keep your feature docs true to the code, automatically.**
+
+<!-- GitHub plays the video; npmjs.com strips <video> and shows the poster image, linked to the video. -->
+<video src="https://github.com/user-attachments/assets/REPLACE_ME" controls muted width="100%">
+  <a href="https://github.com/user-attachments/assets/REPLACE_ME"><img src="https://raw.githubusercontent.com/dragonlong206/lv-engineering-crew/main/docs/assets/lv-demo-poster.jpg" alt="LV Engineer Crew demo — click to watch"></a>
+</video>
+
+LV Engineer Crew (`lv`) is a CLI for **spec-driven development with AI coding agents** (Claude Code, Cursor, Codex, ...). It gives your coding agent the one thing it usually lacks: **accurate, up-to-date context** about the feature it's changing and the ticket it's working on.
+
+```bash
+npm install -g lv-engineer-crew
+```
+
+## Why LV?
+
+AI coding agents are fast, but they start every task cold. They don't know what a feature is supposed to do, why it was designed that way, or what the ticket actually asks for — so you end up pasting context into every prompt, and the docs you do have drift out of date the moment code merges.
+
+LV fixes this with two ideas:
+
+- **Every feature has living docs** — `docs/features/<feature-id>/overview.md` and `design.md`, generated from the real code and loaded into your agent's context automatically.
+- **Docs stay in sync with the code** — when a change is archived, the docs of every feature it touched are refreshed. Run `/opsx:archive` yourself, or [add LV's CI workflow](#ci-archive--doc-sync-on-merge) to your repo and it happens automatically when a PR merges.
+
+Planning and implementation are driven by [OpenSpec](https://github.com/Fission-AI/OpenSpec) inside your coding agent (explore → propose → spec → design → tasks → apply). LV sets up OpenSpec, feeds it the right context, and refreshes the docs when a change is archived.
+
+## How it works
+
+```
+  ┌──────────────┐    ┌──────────────┐    ┌───────────────────────┐    ┌─────────────────────────┐
+  │ 1. lv init   │ →  │ 2. lv start  │ →  │ 3. OpenSpec in your   │ →  │ 4. Merge / archive      │
+  │ lv bootstrap │    │  <ticket> or │    │    coding agent       │    │    archive the spec and │
+  │              │    │  "<text>"    │    │  /opsx:propose        │    │    refresh the feature  │
+  │ feature docs │    │ branch +     │    │  /opsx:apply          │    │    docs (CI, optional)  │
+  │ from code    │    │ state.yaml   │    │  (docs auto-loaded)   │    │                         │
+  └──────────────┘    └──────────────┘    └───────────────────────┘    └────────────┬────────────┘
+         ▲                                                                          │
+         └──────────────────── docs stay accurate for the next change ◄─────────────┘
+```
+
+1. **Set up once** — `lv init --tool claude` installs OpenSpec for your coding agent and wires it to LV's docs. `lv bootstrap` writes a feature's `overview.md`/`design.md` by exploring the existing code.
+2. **Start a change** — `lv start <ticket-id>` pulls the ticket from Lark Base (or `lv start --description "..."` for no ticket), creates a branch, and records the change's context in `state.yaml`.
+3. **Plan and build** — run `/opsx:propose`, `/opsx:apply`, ... in your coding agent. The feature docs and the ticket context are loaded automatically. You review every step.
+4. **Archive** — archiving the OpenSpec change also regenerates the docs of the affected features. Do it by hand with `/opsx:archive`, or let CI do it on merge — **only if you've added the [archive & doc sync workflow](#ci-archive--doc-sync-on-merge) to your repo** (`lv init` doesn't install it for you).
+
+## Key features
+
+- **Living feature docs** — `overview.md` (what the feature does today) and `design.md` (architecture, data model, API contract) per feature, grounded in the actual code and refreshed whenever a change that touches them is archived.
+- **Auto archive & doc sync on merge (opt-in CI)** — add LV's GitHub Actions workflow to your repo and "merged" becomes "specs archived, docs updated", with zero manual steps. Without it, `/opsx:archive` refreshes the docs when you run it yourself.
+- **Context loaded automatically** — every OpenSpec workflow reads the relevant feature docs and ticket context; no copy-pasting into prompts.
+- **Ticket or free text** — start from a Lark Base ticket, or just describe the change. Open to other ticket systems like Jira — see [Ticket systems](#ticket-systems-lark-today-jira-and-others-welcome).
+- **Works with your coding agent** — any agent OpenSpec supports (Claude Code, Cursor, Codex, ...); `lv` doesn't hardcode a list.
+- **Human in the loop** — generated docs are never committed without review during development; you approve each OpenSpec step in your agent.
+- **Fits your git flow** — configurable branch naming per type (`feature/…`, `hotfix/…`), each with its own base branch.
+- **UI design aware** — captures a ticket's Figma link / prototype / attachment and has the agent look at it while writing the proposal.
+
+## Ticket systems: Lark today, Jira and others welcome
+
+Lark Base is the only ticket system LV supports out of the box today, but LV isn't tied to it. `lv start` reaches tickets only through a small `TicketSource` interface ([`src/integrations/tickets/types.ts`](src/integrations/tickets/types.ts)):
+
+- fetch a ticket (title, description, feature IDs, UI design references)
+- download its attachments
+- write feature IDs and status back to the ticket
+- create sub-tickets when a big task is split
+
+Supporting Jira, Linear, GitHub Issues, or an in-house tracker means implementing that interface. The rest of the workflow (branching, `state.yaml`, OpenSpec, doc sync) stays the same. Choosing the source through `.lv.yaml` isn't wired up yet (`lv start` always uses Lark), so a new integration adds that setting too.
+
+Want LV with your ticket system? [Open an issue or a pull request](https://github.com/dragonlong206/lv-engineering-crew/issues). In the meantime, `lv start --description "..."` works with any tracker: paste the ticket's text and go.
+
+## What LV adds to your repo
+
+```
+docs/
+  features/
+    INDEX.md                      # feature list, feature-id → name/path
+    <feature-id>/
+      overview.md                 # current state of the feature
+      design.md                   # architecture, data model, API contract
+  changes/
+    <change-id>/
+      state.yaml                  # ticket/description context for OpenSpec (LV's only artifact here)
+
+openspec/
+  changes/<change-id>/            # proposal.md, specs/, design.md, tasks.md — owned by OpenSpec
+```
+
+`<change-id>` is a ticket ID for ticket-based starts, or a slug derived from the description for description-based ones — the same name identifies both `docs/changes/<change-id>/` and the OpenSpec change under `openspec/changes/<change-id>/`.
+
+---
 
 ## Get started
 
@@ -136,25 +222,6 @@ Env vars take priority over `.lv.local.yaml`.
 
 `lark_app_id`/`lark_app_secret` come from a custom app on the Lark Open Platform (open.larksuite.com → your app → Credentials & Basic Info), added as a collaborator on the target Base with Bitable read permission. `lv start` exchanges them for a short-lived `tenant_access_token` per request via the [internal tenant access token API](https://open.larksuite.com/document/server-docs/getting-started/api-access-token/auth-v3/tenant_access_token_internal) — no long-lived token to manage or rotate.
 
-## Doc structure in the target repo
-
-```
-docs/
-  features/
-    INDEX.md                      # feature list, feature-id → name/path
-    <feature-id>/
-      overview.md                 # current state of the feature
-      design.md                   # architecture, data model, API contract
-  changes/
-    <change-id>/
-      state.yaml                  # ticket/description context for OpenSpec (LV's only artifact here)
-
-openspec/
-  changes/<change-id>/            # proposal.md, specs/, design.md, tasks.md — owned by OpenSpec
-```
-
-`<change-id>` is a ticket ID for ticket-based starts, or a slug derived from the description for description-based ones — the same name identifies both `docs/changes/<change-id>/` and the OpenSpec change under `openspec/changes/<change-id>/`.
-
 ## CI: archive & doc sync on merge
 
 `.github/workflows/archive-on-merge.yml` runs whenever a PR is merged into the repo's default branch. It:
@@ -165,6 +232,8 @@ openspec/
 4. Commits the result **directly to the default branch** (no PR, no required review) — a bot commit under `github-actions[bot]`, or nothing at all if there was nothing to sync.
 
 This is fully automated by design; review generated changes after the fact via `git log`/`git show` rather than before they land.
+
+**Using it in your own repo** — `lv init` does not install this workflow for you yet. Copy `.github/workflows/archive-on-merge.yml` and `scripts/ci/resolve-merged-change.mjs` from this repository into your repo, and replace the "Build lv and expose it on PATH" step (which builds `lv` from this repo's source) with `npm install -g lv-engineer-crew`.
 
 **Pinning the OpenSpec CLI version** — the workflow installs the OpenSpec CLI pinned to whatever version is in the root `.openspec-version` file (a single line, e.g. `1.12.0`), instead of `latest`, so CI's archive/sync behaves the same as your local `openspec archive`/`/opsx:archive` runs. Whenever you intentionally upgrade your local OpenSpec CLI, check the new version (`openspec --version`) and bump `.openspec-version` to match in the same PR.
 
