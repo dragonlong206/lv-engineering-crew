@@ -2,6 +2,9 @@
 
 **Turn tickets into specs, specs into code — and keep your feature docs true to the code, automatically.**
 
+https://github.com/user-attachments/assets/b820eb34-4436-4a4b-b0b2-f76ccff42e3f
+
+
 <!-- GitHub plays the video; npmjs.com strips <video> and shows the poster image, linked to the video. -->
 <video src="https://github.com/user-attachments/assets/REPLACE_ME" controls muted width="100%">
   <a href="https://github.com/user-attachments/assets/REPLACE_ME"><img src="https://raw.githubusercontent.com/dragonlong206/lv-engineering-crew/main/docs/assets/lv-demo-poster.jpg" alt="LV Engineer Crew demo — click to watch"></a>
