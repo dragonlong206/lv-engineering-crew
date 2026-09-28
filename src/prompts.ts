@@ -286,6 +286,21 @@ export const LEGACY_ARCHIVE_GUIDANCE =
 export const ARCHIVE_GUIDANCE =
   "When archiving, sync all delta to OpenSpec specs by default. Before completing this archive, refresh the docs of every feature this change touches by invoking the `lv-bootstrap` skill/command for that feature ID (bare `lv bootstrap <feature-id>` now errors without an explicit mode flag): use the feature IDs recorded in this change's `docs/changes/<change-id>/state.yaml` when present; otherwise, for each of this change's delta spec capability paths, treat its leading path segment as a feature ID and refresh it if a matching `docs/features/<id>/` directory exists.";
 
+// Written into `operations.apply.guidance` — read by the generated `/opsx:apply` workflow
+// (`openspec instructions apply --change <name> --json`'s `operationGuidance` field) and
+// followed advisorily. Deliberately names no test framework: the agent discovers the target
+// repo's own conventions at apply time, and a repo with no test suite at all gets a
+// report-the-gaps fallback instead of a framework it never asked for.
+export const APPLY_TEST_GUIDANCE =
+  "When implementing, write automated tests covering each `#### Scenario:` in this change's delta specs, following this repo's existing test framework, test file locations, and naming conventions (discover them from the existing test suite rather than choosing your own), and run those tests before marking the related tasks complete. If this repo has no automated test framework, do not introduce one unless this change's tasks explicitly call for it; instead, report which delta spec scenarios remain without automated coverage. If this change has no delta spec scenarios, this guidance asks for nothing spec-specific.";
+
+// Written into `rules.tasks` — returned as `rules` by `openspec instructions tasks --json`, so
+// it only constrains the tasks artifact. Turns spec scenarios into checklist items `/opsx:apply`
+// actually ticks off, rather than relying on `APPLY_TEST_GUIDANCE` alone (advisory guidance
+// tends to lose to a concrete checklist that has no test tasks in it).
+export const TASKS_TEST_RULE =
+  "Include explicit tasks for writing automated tests that cover the `#### Scenario:` blocks in this change's delta specs, using this repo's existing test framework and conventions; each such task must name the scenario(s) it covers. If this repo has no automated test framework, plan manual or scripted verification steps per scenario instead of tasks that introduce a new framework.";
+
 // Patched into the generated `/opsx:propose` workflow file(s) by `addProposeStateAutoload()`
 // in init.ts, as a new line inserted right before that workflow's "ask the user" step. The
 // `context:` pointer above can't do this job itself — it's only surfaced once an artifact's

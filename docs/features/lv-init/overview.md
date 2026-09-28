@@ -8,7 +8,7 @@
 
 - `src/index.ts` registers the `init` command and its `--tool` option.
 - `src/cli/init.ts` implements the install-and-patch flow, plus `installLvBootstrapSkill()` for the `lv-bootstrap` skill/command install step and `setApplyModelOverride()` for the apply-model pin.
-- `src/prompts.ts` holds the instruction text that `lv init` writes into `openspec/config.yaml`, the generated propose workflow files, and the `lv-bootstrap` skill/command files (`buildLvBootstrapSkillFile()`, `buildLvBootstrapClaudeCommandFile()`, `buildLvBootstrapCursorCommandFile()`).
+- `src/prompts.ts` holds the instruction text that `lv init` writes into `openspec/config.yaml` (including `ARCHIVE_GUIDANCE`, `APPLY_TEST_GUIDANCE`, and `TASKS_TEST_RULE`), the generated propose workflow files, and the `lv-bootstrap` skill/command files (`buildLvBootstrapSkillFile()`, `buildLvBootstrapClaudeCommandFile()`, `buildLvBootstrapCursorCommandFile()`).
 - `src/config.ts`'s `loadConfig()` resolves `.lv.yaml`'s `openspec.apply_model` setting, read by the apply-model pin step.
 
 ## High-level flow
@@ -20,6 +20,8 @@
 5. After OpenSpec installs, it patches generated files in place:
    - `openspec/config.yaml` gets a `context:` block that points OpenSpec at LV feature docs, the current change state, a convention for `/opsx:sync`, and the configured output language if any. The `/opsx:sync` convention line instructs invoking the `lv-bootstrap` skill/command for each touched feature ID (not a bare `lv bootstrap <feature-id>` call, which now errors without an explicit mode flag).
    - `openspec/config.yaml` gets `operations.archive.guidance` that tells archive workflows to refresh touched feature docs before finishing, by invoking the `lv-bootstrap` skill/command for each — the same corrected wording as the `/opsx:sync` convention line.
+   - `openspec/config.yaml` gets `operations.apply.guidance` telling the `/opsx:apply` workflow to write and run automated tests covering each `#### Scenario:` in the change's delta specs, following the repo's existing test framework and conventions. In a repo with no test framework, it tells the agent not to introduce one unless the change's tasks ask for it, and to report uncovered scenarios instead. The archive and apply entries are written in one pass by `addOperationGuidance()`.
+   - `openspec/config.yaml` gets `rules.tasks`, so a generated `tasks.md` includes test tasks that name the scenarios they cover (or manual/scripted verification steps per scenario when the repo has no test framework).
    - if a project's `openspec/config.yaml` already carries an earlier version of either the archive guidance or the sync-convention line (from before `lv bootstrap` became a skill/command), that step upgrades it to the current wording in place instead of leaving it stale or duplicating it.
    - generated `/opsx:propose` workflow files, when present, are patched to:
      - autoload change state before asking for a description
@@ -37,7 +39,9 @@
 - The CLI help says multiple tools should be passed as a quoted comma-separated value, for example `--tool "claude,codex"`.
 - `openspec init` failures include captured `stderr` in the printed error message.
 - The config and skill/command file updates are all idempotent — re-running `lv init` does not duplicate content, and a previously-installed copy of the archive guidance or sync-convention line using an earlier wording is upgraded to the current wording in place rather than left stale or duplicated.
-- Fresh-template handling preserves OpenSpec scaffold comments by appending raw YAML when the target key is still commented out.
+- Fresh-template handling preserves OpenSpec scaffold comments by appending raw YAML when the target key (`context:`, `operations:`, or `rules:`) is still commented out. All LV-owned `operations:` entries are written in a single append so a fresh install never falls into the comment-stripping YAML merge path.
+- The archive guidance, apply test guidance, and tasks test rule are all advisory. Nothing `lv init` installs blocks or fails a workflow if they are not followed, and existing engineer-written `operations.*.guidance` entries or `rules.*` lists are kept alongside LV's entries.
+- `loadConfig()` runs near the end of `runInit()` (for the apply-model pin), so a `.lv.yaml` that fails `ConfigSchema` validation (for example, with no `lark:` section) makes `lv init` exit with a config error after the `openspec/config.yaml` and workflow patches have already been written.
 - If `openspec/config.yaml` is missing after install, the command prints an error and skips that patch step.
 - The `/opsx:propose` workflow patches are opportunistic. If the expected upstream text shape changes, the command logs an error and leaves that file unmodified.
 - The workflow patches are reapplied whenever OpenSpec regenerates those files.
@@ -47,4 +51,4 @@
 
 ## Current state of the code
 
-The command is implemented and wired into the CLI. It installs OpenSpec when needed, writes LV context into the generated OpenSpec config, patches generated propose workflows when those files exist, installs the `lv-bootstrap` skill/command for every coding agent it detects, and pins the generated `/opsx:apply` command's model when `openspec.apply_model` is configured. The feature reflects the current `src/cli/init.ts` behavior, including `ui_design`/`attachments` handling, output-language guidance, the `lv-bootstrap` skill/command install step, and the apply-model override step added to let an engineer run `/opsx:apply` on a cheaper model without editing OpenSpec-generated files by hand.
+The command is implemented and wired into the CLI. It installs OpenSpec when needed, writes LV context into the generated OpenSpec config, patches generated propose workflows when those files exist, installs the `lv-bootstrap` skill/command for every coding agent it detects, and pins the generated `/opsx:apply` command's model when `openspec.apply_model` is configured. The feature reflects the current `src/cli/init.ts` behavior, including `ui_design`/`attachments` handling, output-language guidance, the apply test guidance and tasks test rule, the `lv-bootstrap` skill/command install step, and the apply-model override step added to let an engineer run `/opsx:apply` on a cheaper model without editing OpenSpec-generated files by hand.
