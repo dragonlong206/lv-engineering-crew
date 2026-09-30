@@ -1,0 +1,14 @@
+ticket_id: recvwFbwfjfDRx
+title: >-
+  When start a sub-task, it should inherit context (description, attachment, UI
+  design) from parent task
+description: >-
+  Task recvvVHvg8zvVm allows LV to split task to sub-tasks but the context is
+  not inheritted
+feature_ids:
+  - lv-start
+branch: feature/recvwFbwfjfDRx-when-start-a-sub-task-it-should-inherit-context-de
+created_at: '2026-09-30T01:48:31.343Z'
+lv_version: 0.1.0
+openspec_changes:
+  - sub-task-inherits-parent-context

@@ -37,6 +37,7 @@ function toTicket(larkTicket: LarkTicket): Ticket {
     featureIds: larkTicket.featureIds,
     uiDesignRefs: larkTicket.uiDesignRefs,
     attachments: larkTicket.attachments,
+    parentId: larkTicket.parentId,
     projectRefs: larkTicket.projectRecordIds,
     raw: { ticket: larkTicket } satisfies LarkRaw,
   };
@@ -84,6 +85,7 @@ export function createLarkTicketSource(config: Config): LarkTicketSourceHandle {
         token,
         config.lark.ui_design_field,
         config.lark.attachment_field,
+        config.lark.subtask_parent_field,
       );
       return toTicket(larkTicket);
     },
