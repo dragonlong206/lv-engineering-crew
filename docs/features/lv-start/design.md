@@ -15,6 +15,7 @@ The code is organized into these layers:
 - Raw Lark Bitable API access — ticket fetch, ticket update, sub-ticket creation, attachment download, feature-record sync — in `src/tools/lark.ts` (no knowledge of `TicketSource`)
 - Feature-match/split LLM agents and confirmation prompts in `src/engine/feature-matching.ts`
 - Task-splitting complexity analysis in `src/engine/task-splitting.ts`
+- Parent-context merging for sub-tickets in `src/engine/parent-context.ts`
 - Existing-branch resume/restart handling in `src/engine/branch-resolution.ts`
 - Branch naming, branch rendering, branch matching, and branch discovery in `src/engine/branch-naming.ts`
 - Feature ID allocation and existing feature discovery in `src/engine/feature-id.ts`
@@ -63,6 +64,7 @@ interface Ticket {
   featureIds: string[];
   uiDesignRefs: string[];
   attachments: { fileToken: string; name: string }[];
+  parentId?: string;     // parent ticket this one is a sub-task of, when the source records it
   projectRefs: string[]; // opaque; meaningful only to the source that produced it
   raw: unknown;          // opaque source-specific state a write-back method may need back
 }
@@ -105,12 +107,13 @@ interface TaskSplitSuggestion {
 - `projectRecordIds: string[]`
 - `uiDesignRefs: string[]`
 - `attachments: { fileToken: string; name: string }[]`
+- `parentId?: string` (first record linked via `subtask_parent_field`, ignoring a self-link)
 - `rawFields: Record<string, unknown>`
 - `featureIdFieldIsLink: boolean`
 
-`fetchTicket()` reads the record from the configured Lark Base table, checks whether the configured Feature ID column is a Bitable Link field by inspecting field metadata, and extracts feature IDs accordingly. For link fields it reads linked record text from `text_arr`; for non-link fields it accepts comma-separated strings or string arrays. It also extracts project link record IDs from the configured project field, normalizes UI design references when configured, extracts attachment metadata when configured, and preserves the raw fields for later updates.
+`fetchTicket()` reads the record from the configured Lark Base table, checks whether the configured Feature ID column is a Bitable Link field by inspecting field metadata, and extracts feature IDs accordingly. For link fields it reads linked record text from `text_arr`; for non-link fields it accepts comma-separated strings or string arrays. It also extracts project link record IDs from the configured project field, normalizes UI design references when configured, extracts attachment metadata when configured, reads the parent ticket's record ID from `subtask_parent_field` via `extractLinkRecordIds()` when configured (a non-Link value simply yields no parent), and preserves the raw fields for later updates.
 
-`createLarkTicketSource()`'s `fetch()` adapts a `LarkTicket` into the generic `Ticket` shape: `projectRecordIds` → `projectRefs`, and the whole `LarkTicket` is stashed opaquely on `Ticket.raw` so `updateFeatureId()`/`updateStatus()` can read `featureIdFieldIsLink`/`rawFields` back out (cast internally; never read outside this module). `createSubtickets()` reads only `parent.id` (the Lark record ID) off the generic `Ticket`, needing nothing from `raw`.
+`createLarkTicketSource()`'s `fetch()` adapts a `LarkTicket` into the generic `Ticket` shape: `projectRecordIds` → `projectRefs`, `parentId` passes through as-is, and the whole `LarkTicket` is stashed opaquely on `Ticket.raw` so `updateFeatureId()`/`updateStatus()` can read `featureIdFieldIsLink`/`rawFields` back out (cast internally; never read outside this module). `createSubtickets()` reads only `parent.id` (the Lark record ID) off the generic `Ticket`, needing nothing from `raw`.
 
 `createSubticket()` (`src/tools/lark.ts`) POSTs a new record directly to the ticket table (not a separate table): the configured title field, a hardcoded `'Description'` field (mirroring `fetchTicket()`'s own hardcoded read of that column — there's no configurable description-field name to reuse), and, when a relationship field name is given, that field set to `[parentTicketId]`. It returns the created record's `record_id` and throws on failure; `LarkTicketSource.createSubtickets()` is the non-fatal, per-sub-task wrapper (parallel to `createFeatureRecord()` vs. `syncFeatureToLarkTable()`).
 
@@ -128,6 +131,7 @@ interface TaskSplitSuggestion {
 - `openspec_changes` with a default of `[]`
 - optional `ui_design`
 - optional `attachments`
+- optional `parent: { ticket_id, title, description }`, the linked parent ticket's own context, recorded only when a parent was fetched
 
 `writeState()` creates the `docs/changes/<change-id>/` directory if needed and serializes the schema as YAML. `readState()` is used during resume handling (`src/engine/branch-resolution.ts`) to determine whether the branch already has persisted context. A confirmed split never reaches `writeState()` for the parent ticket — no state file is written for it.
 
@@ -173,7 +177,7 @@ Key supporting functions and interfaces are:
 - `Ticket`, `TicketSource` in `src/integrations/tickets/types.ts`
 - `createLarkTicketSource(config): LarkTicketSourceHandle` in `src/integrations/tickets/lark-ticket-source.ts`
 - `getTenantAccessToken(appId, appSecret)` in `src/tools/lark.ts`
-- `fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, projectField, token, uiDesignField?, attachmentField?)` in `src/tools/lark.ts`
+- `fetchTicket(ticketId, baseId, tableId, featureIdField, titleField, projectField, token, uiDesignField?, attachmentField?, subtaskParentField?)` in `src/tools/lark.ts`
 - `downloadTicketAttachments(attachments, destDir, token)` in `src/tools/lark.ts`
 - `updateTicketFeatureId(ticket, newFeatureIds, baseId, tableId, featureIdField, token, newFeatureRecordIds?)` in `src/tools/lark.ts`
 - `updateTicketStatus(ticket, newStatus, baseId, tableId, statusField, token)` in `src/tools/lark.ts`
@@ -181,6 +185,7 @@ Key supporting functions and interfaces are:
 - `syncFeatureToLarkTable(config, larkToken, featureId, title, projectRecordIds?)` in `src/tools/lark.ts`
 - `matchExistingFeature()`, `inferFeatureSplit()`, `confirmFeatureMatches()` in `src/engine/feature-matching.ts`
 - `analyzeTaskComplexity(config, title, description, thresholdHours)` in `src/engine/task-splitting.ts`
+- `mergeParentContext(ticket, parent): Ticket` in `src/engine/parent-context.ts`
 - `resolveExistingBranch(repoRoot, config, changeId, baseBranch)` in `src/engine/branch-resolution.ts`
 - `allocateFeatureIds(repoRoot, count, prefix, digits)` in `src/engine/feature-id.ts`
 - `listExistingFeatures(repoRoot)` in `src/engine/feature-id.ts`
@@ -226,10 +231,15 @@ Key supporting functions and interfaces are:
 - Keep Lark writes non-fatal so the local LV context can still be created even when ticket sync, attachment download, sub-ticket creation, or feature-table sync fails.
 - Use LLM-assisted matching, splitting, and task-complexity analysis only when their preconditions are met (existing feature docs available, ticket lacks an explicit Feature ID, ticket-based start not being resumed), so `lv start` can remain automated without forcing a manual step.
 - Preserve optional UI design references and downloaded attachment paths from Lark into persisted state so downstream OpenSpec steps can reuse them.
+- Inherit a sub-ticket's parent context at `lv start` time (following `subtask_parent_field`) rather than copying fields onto sub-tickets at split time: it also covers links created by hand in Lark, needs no Lark write scope, and avoids depending on Bitable accepting one record's attachment `file_token` on another.
+- Reuse `source.fetch()` for the parent instead of adding a `TicketSource.fetchParent()` method; `Ticket` only gains an optional `parentId`.
+- Fetch the parent only after the task-splitting decision, so a ticket being split never pays for a parent fetch.
+- Merge parent attachments before the single download call, so the existing same-name dedupe (`design.png`, `design-2.png`) covers sub-ticket and parent files together without a separate `attachments/parent/` layout.
+- Keep the parent's title/description in a separate `parent` block instead of appending to `description`, because `/opsx:propose` uses `description` as the change's scope; UI design references and attachments are merged because they are reference material, not scope.
 
 ### Non-Goals (task-splitting)
 
 - No support for splitting a `lv start --description` change — there's no ticket system to sync sub-tasks into for that path.
 - No automated parallel execution or "agent team" orchestration — `lv start` only prints guidance that sub-tasks can be started one at a time or in parallel; it never launches or coordinates coding agents itself.
 - No inline editing of individual suggested sub-tasks — the engineer accepts the suggested breakdown as a whole or declines it; adjusting a sub-task happens by editing its Lark record afterward.
-- No copying of attachments or UI design references onto sub-tickets — those stay on the parent ticket.
+- No copying of attachments or UI design references onto sub-ticket records in Lark: those stay on the parent ticket, and `lv start <sub-ticket-id>` inherits them from the parent at start time instead.

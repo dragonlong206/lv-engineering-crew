@@ -337,3 +337,12 @@ export const PROPOSE_UI_DESIGN_LINE =
 // (e.g. video).
 export const PROPOSE_ATTACHMENT_LINE =
   'LV Crew: that same `state.yaml` may also have a non-empty `attachments` — repo-relative paths to files `lv start` already downloaded from the ticket. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), read each listed file directly (no fetch needed) and reflect what you observe in `proposal.md`\'s "What Changes" and "Impact" sections. If a file\'s format can\'t be read directly (e.g. a video), cite its name and path instead of guessing at its content.';
+
+// Patched into the generated `/opsx:propose` workflow file(s) by
+// `addProposeParentContextInstruction()` in init.ts, at the same insertion point as the other
+// state.yaml-driven patches. `lv start` records a sub-ticket's parent as a separate `parent`
+// block (rather than folding it into `description`) because step 1 uses `description` as the
+// change's scope — this line is what tells the proposal to read the parent as background only,
+// so a sub-task's proposal doesn't grow to cover its siblings' work.
+export const PROPOSE_PARENT_CONTEXT_LINE =
+  'LV Crew: that same `state.yaml` may also have a `parent` block — the ticket this change is a sub-task of (`ticket_id`, `title`, `description`); its UI design references and attachments are already merged into `ui_design`/`attachments`. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), read the parent\'s title and description as background context for why this sub-task exists, but keep the proposal\'s scope to this change\'s own `title`/`description` — do not propose the parent\'s other work as part of this change.';

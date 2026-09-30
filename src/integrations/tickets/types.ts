@@ -11,6 +11,9 @@ export interface Ticket {
   featureIds: string[];
   uiDesignRefs: string[];
   attachments: { fileToken: string; name: string }[];
+  // ID of the parent ticket this one is a sub-task of, when the source records that link.
+  // `lv start` fetches it to inherit the parent's context — see `mergeParentContext()`.
+  parentId?: string;
   // Opaque project linkage, meaningful only to the source that produced this ticket and to
   // `syncFeatureToLarkTable()` (not part of this interface — see design.md's Non-Goals). A
   // source with no equivalent concept returns `[]`.

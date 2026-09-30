@@ -40,6 +40,8 @@ When the user is ready to implement, they must start the apply workflow explicit
 
    LV Crew: that same `state.yaml` may also have a non-empty `attachments` — repo-relative paths to files `lv start` already downloaded from the ticket. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), read each listed file directly (no fetch needed) and reflect what you observe in `proposal.md`'s "What Changes" and "Impact" sections. If a file's format can't be read directly (e.g. a video), cite its name and path instead of guessing at its content.
 
+   LV Crew: that same `state.yaml` may also have a `parent` block — the ticket this change is a sub-task of (`ticket_id`, `title`, `description`); its UI design references and attachments are already merged into `ui_design`/`attachments`. If it does, then specifically when you create the `proposal` artifact in step 5 below (not the other artifact types), read the parent's title and description as background context for why this sub-task exists, but keep the proposal's scope to this change's own `title`/`description` — do not propose the parent's other work as part of this change.
+
    If no clear input is provided, ask the user (open-ended, no preset options):
    > "What change do you want to work on? Describe what you want to build or fix."
 

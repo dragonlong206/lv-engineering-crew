@@ -22,8 +22,10 @@ import {
 } from "../engine/feature-matching.js";
 import { resolveExistingBranch } from "../engine/branch-resolution.js";
 import { analyzeTaskComplexity } from "../engine/task-splitting.js";
+import { mergeParentContext } from "../engine/parent-context.js";
 import { generateFeatureDocsPlaceholder } from "./bootstrap.js";
 import { createLarkTicketSource } from "../integrations/tickets/lark-ticket-source.js";
+import type { Ticket } from "../integrations/tickets/types.js";
 import {
   printInfo,
   printSuccess,
@@ -120,11 +122,27 @@ async function startFromTicket(
     }
   }
 
+  // A sub-ticket (linked to a parent via `lark.subtask_parent_field`) inherits its parent's UI
+  // design refs and attachments, merged into `context` — resolved only now, after the split
+  // decision, so a ticket being split never pays for a parent fetch. Only the direct parent is
+  // followed. `ticket` itself stays untouched for write-backs, feature matching, and {summary}.
+  let parent: Ticket | undefined;
+  if (ticket.parentId) {
+    try {
+      parent = await source.fetch(ticket.parentId);
+    } catch (err) {
+      printWarn(
+        `Failed to fetch parent ticket ${ticket.parentId}: ${(err as Error).message}. Continuing with ${ticketId}'s own context only.`,
+      );
+    }
+  }
+  const context = parent ? mergeParentContext(ticket, parent) : ticket;
+
   let downloadedAttachmentPaths: string[] = [];
-  if (ticket.attachments.length > 0) {
+  if (context.attachments.length > 0) {
     const attachmentsDir = path.join(getChangesDir(repoRoot, ticketId), "attachments");
     const { downloaded, failed } = await source.downloadAttachments(
-      ticket,
+      context,
       attachmentsDir,
     );
     downloadedAttachmentPaths = downloaded.map((filename) =>
@@ -271,11 +289,20 @@ async function startFromTicket(
     created_at: now,
     lv_version: LV_VERSION,
     openspec_changes: [],
-    ...(ticket.uiDesignRefs.length > 0
-      ? { ui_design: ticket.uiDesignRefs }
+    ...(context.uiDesignRefs.length > 0
+      ? { ui_design: context.uiDesignRefs }
       : {}),
     ...(downloadedAttachmentPaths.length > 0
       ? { attachments: downloadedAttachmentPaths }
+      : {}),
+    ...(parent
+      ? {
+          parent: {
+            ticket_id: parent.id,
+            title: parent.title,
+            description: parent.description,
+          },
+        }
       : {}),
   };
   writeState(repoRoot, ticketId, state);

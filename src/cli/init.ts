@@ -17,6 +17,7 @@ import {
   PROPOSE_LINK_CHANGE_LINE,
   PROPOSE_UI_DESIGN_LINE,
   PROPOSE_ATTACHMENT_LINE,
+  PROPOSE_PARENT_CONTEXT_LINE,
   buildLvBootstrapSkillFile,
   buildLvBootstrapClaudeCommandFile,
   buildLvBootstrapCursorCommandFile,
@@ -109,6 +110,7 @@ export async function runInit(opts: InitOptions): Promise<void> {
   addProposeLinkInstruction(repoRoot);
   addProposeUiDesignInstruction(repoRoot);
   addProposeAttachmentInstruction(repoRoot);
+  addProposeParentContextInstruction(repoRoot);
   installLvBootstrapSkill(repoRoot);
   setApplyModelOverride(repoRoot, loadConfig());
 
@@ -439,6 +441,37 @@ function addProposeAttachmentInstruction(repoRoot: string): void {
 
     const indent = match[1];
     const insertion = `${indent}${PROPOSE_ATTACHMENT_LINE}\n\n`;
+    const patched = raw.slice(0, match.index) + insertion + raw.slice(match.index);
+    fs.writeFileSync(filePath, patched, "utf-8");
+  }
+}
+
+/**
+ * Idempotently patches the generated `/opsx:propose` workflow file(s) so they read a sub-task's
+ * parent ticket (`state.yaml`'s `parent` block) as background — not scope — specifically when
+ * writing the `proposal` artifact; see `PROPOSE_PARENT_CONTEXT_LINE`. Same anchor and
+ * independent idempotency check as `addProposeAttachmentInstruction()`.
+ */
+function addProposeParentContextInstruction(repoRoot: string): void {
+  for (const relPath of PROPOSE_WORKFLOW_FILES) {
+    const filePath = path.join(repoRoot, relPath);
+    if (!fs.existsSync(filePath)) continue;
+
+    const raw = fs.readFileSync(filePath, "utf-8");
+    if (normalizeWhitespace(raw).includes(normalizeWhitespace(PROPOSE_PARENT_CONTEXT_LINE))) {
+      continue; // already patched
+    }
+
+    const match = raw.match(PROPOSE_ASK_USER_LINE_RE);
+    if (!match || match.index === undefined) {
+      printError(
+        `Could not find the propose workflow's "ask the user" step in ${filePath} — skipping parent-context instruction patch. The file may have changed shape upstream.`,
+      );
+      continue;
+    }
+
+    const indent = match[1];
+    const insertion = `${indent}${PROPOSE_PARENT_CONTEXT_LINE}\n\n`;
     const patched = raw.slice(0, match.index) + insertion + raw.slice(match.index);
     fs.writeFileSync(filePath, patched, "utf-8");
   }

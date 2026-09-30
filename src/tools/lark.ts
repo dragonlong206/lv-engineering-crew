@@ -20,6 +20,10 @@ export interface LarkTicket {
   // nothing. Downloading the actual file content is a separate step
   // (`downloadTicketAttachments()`), not performed here.
   attachments: { fileToken: string; name: string }[];
+  // Record ID of the parent ticket this one links to via `subtask_parent_field` (the first
+  // linked record, ignoring a self-link). Undefined when the field isn't configured, is empty,
+  // or isn't a Link field.
+  parentId?: string;
   rawFields: Record<string, unknown>;
   // Whether `featureIdField` (the field named by `lark.feature_id_field`) is a Bitable Link
   // field, per `isLinkField()`. Determined once in `fetchTicket()` and carried on the ticket
@@ -211,6 +215,7 @@ export async function fetchTicket(
   token: string,
   uiDesignField?: string,
   attachmentField?: string,
+  subtaskParentField?: string,
 ): Promise<LarkTicket> {
   const url = `https://open.larksuite.com/open-apis/bitable/v1/apps/${baseId}/tables/${tableId}/records/${ticketId}`;
 
@@ -263,6 +268,10 @@ export async function fetchTicket(
 
   const attachments = attachmentField ? extractAttachments(fields[attachmentField]) : [];
 
+  const parentId = subtaskParentField
+    ? extractLinkRecordIds(fields[subtaskParentField]).find((id) => id !== ticketId)
+    : undefined;
+
   return {
     id: ticketId,
     title,
@@ -271,6 +280,7 @@ export async function fetchTicket(
     projectRecordIds,
     uiDesignRefs,
     attachments,
+    parentId,
     rawFields: fields,
     featureIdFieldIsLink,
   };
@@ -685,6 +695,7 @@ export const larkTicketTool = createTool({
     token: z.string(),
     uiDesignField: z.string().optional(),
     attachmentField: z.string().optional(),
+    subtaskParentField: z.string().optional(),
   }),
   execute: async ({
     ticketId,
@@ -696,6 +707,7 @@ export const larkTicketTool = createTool({
     token,
     uiDesignField,
     attachmentField,
+    subtaskParentField,
   }) => {
     const ticket = await fetchTicket(
       ticketId,
@@ -707,6 +719,7 @@ export const larkTicketTool = createTool({
       token,
       uiDesignField,
       attachmentField,
+      subtaskParentField,
     );
     return ticket;
   },

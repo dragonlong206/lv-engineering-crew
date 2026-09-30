@@ -24,6 +24,18 @@ export const StateSchema = z.object({
   // `[]`) when there's nothing to record — see `downloadTicketAttachments()` in
   // src/tools/lark.ts.
   attachments: z.array(z.string()).optional(),
+  // The parent ticket this change's ticket links to via `lark.subtask_parent_field`, recorded
+  // as background context — `title`/`description` above stay the sub-ticket's own scope. The
+  // parent's UI design refs/attachments are merged into `ui_design`/`attachments` instead.
+  // Omitted when no parent was resolved — see `mergeParentContext()` in
+  // src/engine/parent-context.ts.
+  parent: z
+    .object({
+      ticket_id: z.string(),
+      title: z.string(),
+      description: z.string(),
+    })
+    .optional(),
 });
 export type State = z.infer<typeof StateSchema>;
 
