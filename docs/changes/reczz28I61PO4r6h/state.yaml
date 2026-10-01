@@ -1,0 +1,31 @@
+ticket_id: reczz28I61PO4r6h
+title: Backward compatibility issue with OpenSpec Archive
+description: >-
+  The archive guidance in config.yaml isn't applied because of a YAML parse
+  error, and the CLI dropped it with the warning I missed.
+
+
+  Cause: the first item under operations.archive.guidance (line 25) is a plain
+  scalar with a :  inside it. The text is ...running \lv bootstrap <feature-id>:
+  >-. YAML reads X: >-as a key/value pair, so that item becomes a mapping, not a
+  string. The CLI requires an array of strings, so it discards the wholearchive
+  guidance, including the valid second item on lines 31–40. My guidance input
+  was empty and the doc refresh never reached me.
+
+
+  Fix: delete the first item (lines 25–30). It's an older duplicate of the
+  second item, which already uses the >- block-scalar form with the current
+  lv-bootstrap wording. Then openspec instructions archive --change <name>
+  --json should return operationGuidance with no warning.
+
+
+  The apply guidance is fine, since its item is a proper - >- scalar.
+
+
+  The attachment is the fix.
+feature_ids:
+  - lv-init
+branch: feature/reczz28I61PO4r6h-backward-compatibility-issue-with-openspec-archive
+created_at: '2026-10-01T09:27:55.385Z'
+lv_version: 0.1.0
+openspec_changes: []
