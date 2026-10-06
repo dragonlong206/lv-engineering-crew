@@ -5,7 +5,7 @@ import { execa } from "execa";
 import which from "which";
 import { getRepoRoot, loadConfig } from "../config.js";
 import type { Config } from "../types.js";
-import { printInfo, printSuccess, printError, confirm, writeFile } from "./helpers.js";
+import { printInfo, printSuccess, printError, printWarn, confirm, writeFile } from "./helpers.js";
 import {
   CONTEXT_POINTER_LINES,
   LEGACY_CONTEXT_POINTER_SYNC_LINE,
@@ -46,6 +46,37 @@ function flexibleWhitespacePattern(text: string): RegExp {
     .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
     .join("\\s+");
   return new RegExp(source);
+}
+
+/**
+ * Recovers a guidance/rules list item that was meant to be a string but loaded as a one-key
+ * mapping — what an unquoted plain scalar containing ": " parses as. The original
+ * `addArchiveGuidance()` (`5377e7f`, before `797e2b2` started quoting) wrote the legacy archive
+ * wording unquoted, and that wording contains "`lv bootstrap <feature-id>`: use ...", so
+ * OpenSpec (which requires every item to be a string) silently discarded the whole list. YAML
+ * split the scalar at its first ": ", so `"<key>: <value>"` rebuilds the text as written.
+ * Anything else that isn't a string is returned as-is — not something LV can reinterpret.
+ */
+function coerceListEntry(entry: unknown): { value: unknown; repaired: boolean } {
+  if (typeof entry === "string" || entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+    return { value: entry, repaired: false };
+  }
+  const pairs = Object.entries(entry as Record<string, unknown>);
+  if (pairs.length !== 1) return { value: entry, repaired: false };
+  const [key, val] = pairs[0];
+  if (val !== null && typeof val === "object") return { value: entry, repaired: false };
+  return { value: `${key}: ${val ?? ""}`.trimEnd(), repaired: true };
+}
+
+/** Maps every item of `list` through `coerceListEntry()`, reporting whether any were repaired. */
+function coerceList(list: unknown[]): { list: unknown[]; repaired: boolean } {
+  let repaired = false;
+  const coerced = list.map((entry) => {
+    const result = coerceListEntry(entry);
+    repaired ||= result.repaired;
+    return result.value;
+  });
+  return { list: coerced, repaired };
 }
 
 /**
@@ -243,28 +274,51 @@ function addOperationGuidance(repoRoot: string, entries: OperationGuidanceEntry[
   const parsed = (yaml.load(raw) as Record<string, unknown>) ?? {};
   const operations = (parsed.operations as Record<string, unknown>) ?? {};
   let changed = false;
+  const repairedLists: string[] = [];
 
   for (const { operation, text, legacy } of entries) {
     const op = (operations[operation] as Record<string, unknown>) ?? {};
-    const guidance = Array.isArray(op.guidance) ? (op.guidance as string[]) : [];
+    const coerced = coerceList(Array.isArray(op.guidance) ? op.guidance : []);
+    let guidance = coerced.list;
+    let opChanged = coerced.repaired;
+    if (coerced.repaired) repairedLists.push(`operations.${operation}.guidance`);
 
     // Matched via normalized content (not a raw substring) since YAML re-serializes each entry
     // as a folded/wrapped block scalar, not the single-line form the constants are written as.
     const matches = (candidate: string) => (entry: unknown) =>
-      normalizeWhitespace(String(entry)) === normalizeWhitespace(candidate);
+      typeof entry === "string" && normalizeWhitespace(entry) === normalizeWhitespace(candidate);
+    const isLegacy = legacy ? matches(legacy) : () => false;
 
-    if (guidance.some(matches(text))) continue; // already wired
-
-    const legacyIndex = legacy ? guidance.findIndex(matches(legacy)) : -1;
-    if (legacyIndex !== -1) {
-      guidance[legacyIndex] = text;
+    if (guidance.some(matches(text))) {
+      // Already wired — drop any superseded copy still sitting alongside the current wording.
+      const withoutLegacy = guidance.filter((entry) => !isLegacy(entry));
+      if (withoutLegacy.length !== guidance.length) {
+        guidance = withoutLegacy;
+        opChanged = true;
+      }
     } else {
-      guidance.push(text);
+      const legacyIndex = guidance.findIndex(isLegacy);
+      if (legacyIndex !== -1) {
+        // Upgrade the first legacy copy in place, dropping any further ones.
+        guidance = guidance
+          .map((entry, i) => (i === legacyIndex ? text : entry))
+          .filter((entry, i) => i === legacyIndex || !isLegacy(entry));
+      } else {
+        guidance.push(text);
+      }
+      opChanged = true;
     }
 
+    if (!opChanged) continue;
     op.guidance = guidance;
     operations[operation] = op;
     changed = true;
+  }
+
+  if (repairedLists.length > 0) {
+    printWarn(
+      `Repaired malformed ${repairedLists.join(", ")} in openspec/config.yaml — item(s) written unquoted by an earlier lv init parsed as mappings, so OpenSpec was ignoring the whole list.`,
+    );
   }
 
   if (!changed) return;
@@ -302,15 +356,26 @@ function addArtifactRules(repoRoot: string, rules: Record<string, string[]>): vo
   const parsed = (yaml.load(raw) as Record<string, unknown>) ?? {};
   const existingRules = (parsed.rules as Record<string, unknown>) ?? {};
   let changed = false;
+  const repairedLists: string[] = [];
 
   for (const [artifactId, texts] of Object.entries(rules)) {
-    const list = Array.isArray(existingRules[artifactId]) ? (existingRules[artifactId] as string[]) : [];
+    const { list, repaired } = coerceList(Array.isArray(existingRules[artifactId]) ? existingRules[artifactId] : []);
+    if (repaired) {
+      repairedLists.push(`rules.${artifactId}`);
+      changed = true;
+    }
     for (const text of texts) {
-      if (list.some((entry) => normalizeWhitespace(String(entry)) === normalizeWhitespace(text))) continue;
+      if (list.some((entry) => typeof entry === "string" && normalizeWhitespace(entry) === normalizeWhitespace(text))) continue;
       list.push(text);
       changed = true;
     }
     existingRules[artifactId] = list;
+  }
+
+  if (repairedLists.length > 0) {
+    printWarn(
+      `Repaired malformed ${repairedLists.join(", ")} in openspec/config.yaml — unquoted item(s) parsed as mappings, so OpenSpec was ignoring the whole list.`,
+    );
   }
 
   if (!changed) return;
