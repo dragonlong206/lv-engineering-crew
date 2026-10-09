@@ -97,7 +97,7 @@ Never force-push unless the user explicitly asked; if the push is rejected, repo
 
 ## 5. Open the PR
 
-Base is the repo's default branch unless the user or repo conventions (e.g. a gitflow `develop`) say otherwise. First check whether a PR already exists for this branch: `gh pr view --json url 2>/dev/null` — if one does, the push already updated it, so just report its URL instead of creating a duplicate.
+Base is the `base_branch` in the matching `docs/changes/*/state.yaml` when present (a sub-task of a big feature), otherwise the repo's default branch unless the user or repo conventions (e.g. a gitflow `develop`) say otherwise. First check whether a PR already exists for this branch: `gh pr view --json url 2>/dev/null` — if one does, the push already updated it, so just report its URL instead of creating a duplicate.
 
 Otherwise, review **all** commits going into the PR (`git log <base>..HEAD`, `git diff <base>...HEAD --stat`), then build the body from the OpenSpec docs if the work has any (5a), falling back to the diff alone if not (5b).
 

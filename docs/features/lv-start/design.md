@@ -243,3 +243,7 @@ Key supporting functions and interfaces are:
 - No automated parallel execution or "agent team" orchestration — `lv start` only prints guidance that sub-tasks can be started one at a time or in parallel; it never launches or coordinates coding agents itself.
 - No inline editing of individual suggested sub-tasks — the engineer accepts the suggested breakdown as a whole or declines it; adjusting a sub-task happens by editing its Lark record afterward.
 - No copying of attachments or UI design references onto sub-ticket records in Lark: those stay on the parent ticket, and `lv start <sub-ticket-id>` inherits them from the parent at start time instead.
+
+### Big feature git flow
+
+After a confirmed split, `confirmBigFeatureFlow()` asks whether to collect the sub-tasks on a parent branch. On yes, once sub-tickets exist, `createBigFeatureBranch()` (`src/cli/start.ts`) forks the parent ticket's branch from the type's base branch, commits a `state.yaml` with `big_feature: true`, and pushes (non-fatal). On `lv start <sub-id>`, after the parent fetch, `findBigFeatureBranch()` (`src/engine/big-feature.ts`) scans the parent's change branches for a committed `state.yaml` with `big_feature: true` (local, then `origin/`); a hit overrides the fork base for `createBranch()` and is stored as `base_branch` so PR tooling targets it. Only the direct parent is considered.

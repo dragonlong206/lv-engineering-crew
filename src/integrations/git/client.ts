@@ -42,6 +42,15 @@ export async function push(repoRoot: string, branchName: string): Promise<void> 
   await git(['push', '--set-upstream', 'origin', branchName], repoRoot);
 }
 
+/** Reads a file's content as of `ref` (`git show`), or `undefined` if the ref or path doesn't exist. */
+export async function readFileAtRef(repoRoot: string, ref: string, filePath: string): Promise<string | undefined> {
+  try {
+    return await git(['show', `${ref}:${filePath}`], repoRoot);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function currentBranch(repoRoot: string): Promise<string> {
   return (await git(['rev-parse', '--abbrev-ref', 'HEAD'], repoRoot)).trim();
 }

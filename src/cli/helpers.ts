@@ -121,6 +121,18 @@ export async function confirmTaskSplit(
   return confirm(`Create these ${subtasks.length} sub-task(s) and stop here? [y/N] `);
 }
 
+/**
+ * Asked after a confirmed task split: whether to collect the sub-tasks' work on a parent
+ * "big feature" branch (sub-task branches fork from it and their PRs target it) instead of
+ * each sub-task forking from the base branch independently.
+ */
+export async function confirmBigFeatureFlow(): Promise<boolean> {
+  console.log(
+    `Big feature git flow: create a branch for the parent ticket; each sub-task branches from it and opens its pull request back into it.`,
+  );
+  return confirm(`Follow the big feature git flow? [y/N] `);
+}
+
 export function openEditor(filePath: string): void {
   const editor =
     process.env['EDITOR'] ??

@@ -7,7 +7,7 @@ import {
   getChangesDir,
 } from "../config.js";
 import { syncFeatureToLarkTable } from "../tools/lark.js";
-import { createBranch, commitAll } from "../integrations/git/client.js";
+import { createBranch, commitAll, push } from "../integrations/git/client.js";
 import { writeState } from "../engine/state-io.js";
 import {
   renderBranchName,
@@ -22,6 +22,7 @@ import {
 } from "../engine/feature-matching.js";
 import { resolveExistingBranch } from "../engine/branch-resolution.js";
 import { analyzeTaskComplexity } from "../engine/task-splitting.js";
+import { findBigFeatureBranch } from "../engine/big-feature.js";
 import { mergeParentContext } from "../engine/parent-context.js";
 import { generateFeatureDocsPlaceholder } from "./bootstrap.js";
 import { createLarkTicketSource } from "../integrations/tickets/lark-ticket-source.js";
@@ -34,6 +35,7 @@ import {
   confirm,
   confirmFeatureSplit,
   confirmTaskSplit,
+  confirmBigFeatureFlow,
 } from "./helpers.js";
 import { LV_VERSION, type State } from "../types.js";
 
@@ -96,6 +98,7 @@ async function startFromTicket(
     if (suggestion.shouldSplit) {
       const confirmed = await confirmTaskSplit(suggestion.reason, suggestion.subtasks);
       if (confirmed) {
+        const bigFeature = await confirmBigFeatureFlow();
         const { created, failed } = await source.createSubtickets(
           ticket,
           suggestion.subtasks,
@@ -111,11 +114,30 @@ async function startFromTicket(
           printWarn(`Failed to create sub-task '${failure.title}': ${failure.error}.`);
         }
 
+        let bigFeatureBranch: string | undefined;
+        if (bigFeature) {
+          if (created.length === 0) {
+            printWarn(
+              `No sub-task was created — skipping the big feature branch for ${ticketId}.`,
+            );
+          } else {
+            bigFeatureBranch = await createBigFeatureBranch(
+              config,
+              repoRoot,
+              ticket,
+              opts,
+              baseBranch,
+            );
+          }
+        }
+
         console.log(
           `\nStart each sub-task with 'lv start <sub-ticket-id>' — one at a time, or in parallel across separate branches/coding-agent sessions.`,
         );
         printInfo(
-          `Stopped without creating a branch for ${ticketId} — its work now lives in the sub-task(s) above.`,
+          bigFeatureBranch
+            ? `Created big feature branch ${bigFeatureBranch} — each sub-task will fork from it and should open its pull request into it.`
+            : `Stopped without creating a branch for ${ticketId} — its work now lives in the sub-task(s) above.`,
         );
         return;
       }
@@ -137,6 +159,25 @@ async function startFromTicket(
     }
   }
   const context = parent ? mergeParentContext(ticket, parent) : ticket;
+
+  // A parent that went through the big feature git flow has a branch collecting its sub-tasks'
+  // work — fork this sub-task from it (and record it, so the PR targets it) instead of the type's
+  // base branch.
+  let forkBranch = baseBranch;
+  let bigFeatureBase: string | undefined;
+  if (parent) {
+    bigFeatureBase = await findBigFeatureBranch(repoRoot, config, parent.id);
+    if (bigFeatureBase) {
+      printInfo(
+        `Parent ${parent.id} follows the big feature git flow — branching from ${bigFeatureBase}.`,
+      );
+      forkBranch = bigFeatureBase;
+    }
+  } else if (ticket.parentId) {
+    printWarn(
+      `Could not check ${ticket.parentId} for a big feature branch; branching from ${baseBranch}.`,
+    );
+  }
 
   let downloadedAttachmentPaths: string[] = [];
   if (context.attachments.length > 0) {
@@ -276,7 +317,7 @@ async function startFromTicket(
     printInfo(`Continuing on existing branch ${existingBranchName}...`);
   } else {
     printInfo(`Creating branch ${branchName}...`);
-    await createBranch(repoRoot, branchName, baseBranch);
+    await createBranch(repoRoot, branchName, forkBranch);
   }
 
   const now = new Date().toISOString();
@@ -289,6 +330,7 @@ async function startFromTicket(
     created_at: now,
     lv_version: LV_VERSION,
     openspec_changes: [],
+    ...(bigFeatureBase ? { base_branch: bigFeatureBase } : {}),
     ...(context.uiDesignRefs.length > 0
       ? { ui_design: context.uiDesignRefs }
       : {}),
@@ -311,6 +353,52 @@ async function startFromTicket(
 
   printSuccess(`Started ticket ${ticketId}`);
   printNextSteps(ticketId);
+  if (bigFeatureBase) {
+    console.log(`Open this sub-task's pull request against ${bigFeatureBase}, not ${baseBranch}.`);
+  }
+}
+
+/**
+ * Big feature git flow: creates the parent ticket's branch (forked from the type's base
+ * branch), commits a `state.yaml` marked `big_feature`, and pushes it so sub-task branches and
+ * PRs can use it. Push failure is non-fatal, same as elsewhere in `lv start`.
+ */
+async function createBigFeatureBranch(
+  config: ReturnType<typeof loadConfig>,
+  repoRoot: string,
+  ticket: Ticket,
+  opts: StartOptions,
+  baseBranch: string,
+): Promise<string> {
+  const branchName = renderBranchName(config, ticket.id, {
+    type: opts.type,
+    summary: ticket.title,
+  });
+  printInfo(`Creating big feature branch ${branchName}...`);
+  await createBranch(repoRoot, branchName, baseBranch);
+
+  const state: State = {
+    ticket_id: ticket.id,
+    title: ticket.title,
+    description: ticket.description,
+    feature_ids: [],
+    branch: branchName,
+    created_at: new Date().toISOString(),
+    lv_version: LV_VERSION,
+    openspec_changes: [],
+    big_feature: true,
+  };
+  writeState(repoRoot, ticket.id, state);
+  await commitAll(repoRoot, `lv: start ${ticket.id} — big feature branch`);
+
+  try {
+    await push(repoRoot, branchName);
+  } catch (err) {
+    printWarn(
+      `Failed to push ${branchName}: ${(err as Error).message}. It is local only — push it before starting sub-tasks on other machines.`,
+    );
+  }
+  return branchName;
 }
 
 async function startFromDescription(

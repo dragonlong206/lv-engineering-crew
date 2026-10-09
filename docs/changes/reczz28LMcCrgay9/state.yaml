@@ -11,4 +11,5 @@ feature_ids:
 branch: feature/reczz28LMcCrgay9-when-start-a-big-task-have-ability-to-follow-big-f
 created_at: '2026-10-09T15:41:32.782Z'
 lv_version: 0.1.0
-openspec_changes: []
+openspec_changes:
+  - big-feature-git-flow
