@@ -1,0 +1,14 @@
+ticket_id: reczz28LMcCrgay9
+title: When start a big task, have ability to follow big feature git flow
+description: >-
+  When start a task if identify it's a task and suggest to split into smaller
+  task, ask user if they want to follow big feature git flow. If they agree to
+  split tasks and follow big feature git flow, then create a git branch for the
+  parent and then checkout and pull request branch of sub-task from and to big
+  feature branch.
+feature_ids:
+  - lv-start
+branch: feature/reczz28LMcCrgay9-when-start-a-big-task-have-ability-to-follow-big-f
+created_at: '2026-10-09T15:41:32.782Z'
+lv_version: 0.1.0
+openspec_changes: []
