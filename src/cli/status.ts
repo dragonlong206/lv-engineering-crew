@@ -61,6 +61,8 @@ export function printStateSummary(changeId: string, state: State): void {
   console.log(`Description: ${state.description || '(none)'}`);
   console.log(`Features:    ${state.feature_ids.length > 0 ? state.feature_ids.join(', ') : '(none)'}`);
   console.log(`Branch:      ${state.branch}`);
+  if (state.big_feature) console.log(`Big feature: yes — sub-task branches fork from and target this branch`);
+  if (state.base_branch) console.log(`Base:        ${state.base_branch} (open this change's PR against it)`);
   console.log(`Created:     ${state.created_at}`);
   console.log(`Version:     ${state.lv_version}`);
   console.log('');

@@ -36,6 +36,12 @@ export const StateSchema = z.object({
       description: z.string(),
     })
     .optional(),
+  // Set on a parent ticket's branch created by the big feature git flow (`lv start` split) —
+  // sub-task branches fork from, and open PRs against, this branch.
+  big_feature: z.boolean().optional(),
+  // The branch a sub-task was forked from when that was its parent's big-feature branch rather
+  // than the branch type's base branch; the PR for this change should target it.
+  base_branch: z.string().optional(),
 });
 export type State = z.infer<typeof StateSchema>;
 
