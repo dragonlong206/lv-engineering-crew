@@ -1,0 +1,16 @@
+ticket_id: reczz28Ll8FTXnr7
+title: Skip refreshing feature docs in pipeline if they were already refreshed
+description: >-
+  OpenSpec Archive is already guided to run `lv bootstrap` to refresh feature
+  docs. In some cases, LLM can miss to call tool or the change is not archived
+  before create pull request. Even the docs were refreshed, when
+  archive-on-merge pipeline run, it calls lv bootstrap again and LLM can
+  generate different docs. So, need a mechanism to mark feature docs were
+  refreshed on archive and the will be skipped to refresh in the pipeline in
+  this case.
+feature_ids:
+  - devops
+branch: feature/reczz28Ll8FTXnr7-skip-refreshing-feature-docs-in-pipeline-if-they-w
+created_at: '2026-10-11T03:16:12.878Z'
+lv_version: 0.1.0
+openspec_changes: []
