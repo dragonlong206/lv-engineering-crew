@@ -50,11 +50,19 @@ if (!match) {
 
 const { changeId, state } = match;
 const openspecChanges = state.openspec_changes ?? [];
-const featureIds = state.feature_ids ?? [];
+const allFeatureIds = state.feature_ids ?? [];
+// Features whose docs the engineer already refreshed via `lv bootstrap --finalize` on this
+// branch — skip them so the headless refresh doesn't regenerate docs they just wrote.
+const refreshedFeatures = new Set(state.refreshed_features ?? []);
+const featureIds = allFeatureIds.filter((id) => !refreshedFeatures.has(id));
+const skippedFeatureIds = allFeatureIds.filter((id) => refreshedFeatures.has(id));
 
 console.error(
   `Resolved branch '${branch}' -> change '${changeId}' (openspec_changes: ${openspecChanges.length}, feature_ids: ${featureIds.length})`
 );
+if (skippedFeatureIds.length > 0) {
+  console.error(`Skipping already-refreshed feature docs: ${skippedFeatureIds.join(", ")}`);
+}
 
 writeOutputs({
   "change-id": changeId,

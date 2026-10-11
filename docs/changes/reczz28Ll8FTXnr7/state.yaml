@@ -13,4 +13,7 @@ feature_ids:
 branch: feature/reczz28Ll8FTXnr7-skip-refreshing-feature-docs-in-pipeline-if-they-w
 created_at: '2026-10-11T03:16:12.878Z'
 lv_version: 0.1.0
-openspec_changes: []
+openspec_changes:
+  - skip-refreshed-feature-docs
+refreshed_features:
+  - devops

@@ -18,7 +18,8 @@ Four independent concerns share the `devops` feature bucket: a runtime observabi
 
 **CI archive-on-merge:**
 - **Trigger/workflow layer**: `.github/workflows/archive-on-merge.yml`, a single `archive-and-sync` job on `pull_request: closed`, gated by `github.event.pull_request.merged == true && github.event.pull_request.base.ref == github.event.repository.default_branch`.
-- **Resolution layer**: `scripts/ci/resolve-merged-change.mjs`, a standalone Node script (plain Node + `js-yaml`) invoked as a workflow step. It reads `docs/changes/*/state.yaml` directly and writes `change-id`/`openspec-changes`/`feature-ids` to `$GITHUB_OUTPUT`.
+- **Resolution layer**: `scripts/ci/resolve-merged-change.mjs`, a standalone Node script (plain Node + `js-yaml`) invoked as a workflow step. It reads `docs/changes/*/state.yaml` directly and writes `change-id`/`openspec-changes`/`feature-ids` to `$GITHUB_OUTPUT`, where `feature-ids` is `feature_ids` minus any `refreshed_features`.
+- **Refreshed-marker layer**: `lv bootstrap <id> --finalize` (`runBootstrapFinalize()` in `src/cli/bootstrap.ts`) resolves the current branch with `currentBranch()` + `matchBranch()` and calls `markFeatureRefreshed()` (`src/engine/state-io.ts`) to append the feature ID to the change's `state.yaml`. Off a change branch it records nothing.
 - **Archive layer**: the OpenSpec CLI, installed pinned to the root `.openspec-version` file, invoked as `openspec archive "<name>" --yes --json` per resolved change name.
 - **PATH-exposure layer**: after `npm run build`, a shell wrapper is written directly to `/usr/local/bin/lv` (`exec node "$GITHUB_WORKSPACE/dist/index.js" "$@"`), giving the next step's `claude -p` subprocess a deterministic, always-on-`PATH` `lv` — not `npm link`, whose install location depends on npm's global prefix.
 - **Doc-refresh layer**: the Claude Code CLI, authenticated via the `CLAUDE_CODE_OAUTH_TOKEN` secret, invoked as `claude -p "..."` per resolved feature ID (with `--allowedTools "Bash(lv bootstrap:*) Read Glob Grep Write Edit"`) to run the `lv-bootstrap` skill headlessly.
@@ -44,7 +45,7 @@ Four independent concerns share the `devops` feature bucket: a runtime observabi
 - No other data model exists for this half of the feature.
 
 **CI archive-on-merge:**
-- `docs/changes/<change-id>/state.yaml`'s `branch`, `openspec_changes`, and `feature_ids` are the sole inputs the resolution script reads.
+- `docs/changes/<change-id>/state.yaml`'s `branch`, `openspec_changes`, `feature_ids`, and `refreshed_features` are the sole inputs the resolution script reads. `refreshed_features` (`StateSchema` in `src/types.ts`) is an optional string array, omitted when empty, so older state files behave as "nothing refreshed".
 - The resolution script's outputs (`change-id: string`, `openspec-changes: string` (JSON array), `feature-ids: string` (JSON array)) are plain `$GITHUB_OUTPUT` key/value lines.
 - The root `.openspec-version` file is a single line of plain text (e.g. `1.12.0`).
 
@@ -91,6 +92,7 @@ Four independent concerns share the `devops` feature bucket: a runtime observabi
 - Headless doc refresh authenticated via `claude setup-token`'s long-lived `CLAUDE_CODE_OAUTH_TOKEN`, not `ANTHROPIC_API_KEY` — matches an existing Claude subscription rather than metered API billing.
 - Direct push to the default branch, skip if nothing changed, with one rebase-and-retry on a push conflict — chosen over opening a follow-up PR to keep the loop fully automated.
 - Idempotency via directory-existence check before archiving a given change name.
+- Skip already-refreshed features via a marker in `state.yaml`, written by `--finalize` rather than by the agent: finalize is the one deterministic step that always ends a refresh, so the marker cannot be forgotten the way the refresh itself can. Filtering happens in `resolve-merged-change.mjs`, so the workflow's existing `feature-ids != '[]'` guards skip the build and headless refresh with no workflow logic change. The marker lives in `state.yaml` (the per-change source of truth CI already reads), not in the LLM-rewritten feature docs. Trade-off: it is not invalidated by later code edits.
 - Fixed-path wrapper script over `npm link` to expose `lv` on `PATH` for the headless step: `npm link`'s install location depends on npm's global prefix, which isn't guaranteed to be on `PATH` for the `claude -p` subprocess. When it wasn't, the agent fell back to alternatives (`npm run dev`, `npx tsx`, `node -e`) that don't match the narrow `Bash(lv bootstrap:*)` allow-rule and got denied every time. Writing `#!/usr/bin/env bash\nexec node "$GITHUB_WORKSPACE/dist/index.js" "$@"` straight to `/usr/local/bin/lv` sidesteps the global-prefix question entirely (fixed in #24, after this workflow's initial `npm link` version shipped).
 
 **CI release-to-npm:**

@@ -111,7 +111,7 @@ Once both files are written, run (no LLM call):
 lv bootstrap <feature-id> --finalize --title "<short human-readable title derived from the overview you just wrote>"
 \`\`\`
 
-This updates \`docs/features/INDEX.md\` and syncs the feature to Lark when that's configured — you don't need to do either yourself.`;
+This updates \`docs/features/INDEX.md\`, marks the feature as refreshed in the current change's \`docs/changes/<change-id>/state.yaml\` (so CI skips regenerating it on merge), and syncs the feature to Lark when that's configured — you don't need to do any of these yourself.`;
 
 // Shared one-line description used by every tool's SKILL.md/command frontmatter — a single
 // constant so the wording never drifts between the skill and any known-shape command file.
