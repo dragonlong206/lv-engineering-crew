@@ -115,7 +115,7 @@ interface TaskSplitSuggestion {
 
 `createLarkTicketSource()`'s `fetch()` adapts a `LarkTicket` into the generic `Ticket` shape: `projectRecordIds` → `projectRefs`, `parentId` passes through as-is, and the whole `LarkTicket` is stashed opaquely on `Ticket.raw` so `updateFeatureId()`/`updateStatus()` can read `featureIdFieldIsLink`/`rawFields` back out (cast internally; never read outside this module). `createSubtickets()` reads only `parent.id` (the Lark record ID) off the generic `Ticket`, needing nothing from `raw`.
 
-`createSubticket()` (`src/tools/lark.ts`) POSTs a new record directly to the ticket table (not a separate table): the configured title field, a hardcoded `'Description'` field (mirroring `fetchTicket()`'s own hardcoded read of that column — there's no configurable description-field name to reuse), and, when a relationship field name is given, that field set to `[parentTicketId]`. It returns the created record's `record_id` and throws on failure; `LarkTicketSource.createSubtickets()` is the non-fatal, per-sub-task wrapper (parallel to `createFeatureRecord()` vs. `syncFeatureToLarkTable()`).
+`createSubticket()` (`src/tools/lark.ts`) POSTs a new record directly to the ticket table (not a separate table): the configured title field, a hardcoded `'Description'` field (mirroring `fetchTicket()`'s own hardcoded read of that column — there's no configurable description-field name to reuse), when a relationship field name is given, that field set to `[parentTicketId]`, and any inherited fields. `buildInheritedFields()` derives those from the parent's raw record: features (`feature_id_field`) and project (`project_field`) as linked record IDs, plus assignee (`assignee_field`, linked IDs or `[{id}]` for a person field) and order (`order_field`, numeric when `isNumberField()` says so) when configured; empty parent values are skipped, and `LarkTicketSource.createSubtickets()` retries a rejected create once without them, warning which fields were dropped. It returns the created record's `record_id` and throws on failure; `LarkTicketSource.createSubtickets()` is the non-fatal, per-sub-task wrapper (parallel to `createFeatureRecord()` vs. `syncFeatureToLarkTable()`).
 
 ### Persisted state
 
@@ -158,6 +158,8 @@ The relevant configuration shape includes:
 - `lark.in_dev_status_value`
 - `lark.sync_status`
 - `lark.subtask_parent_field` (optional; Link field name for a sub-ticket's relationship back to its parent)
+- `lark.assignee_field` (optional; inherited by sub-tickets on split)
+- `lark.order_field` (optional; inherited by sub-tickets on split, written as a number when the column is Number-typed)
 - `default_branch`
 - `default_branch_type`
 - `branch_types`, where each entry is either a plain naming-pattern string or `{ pattern, base_branch? }`
