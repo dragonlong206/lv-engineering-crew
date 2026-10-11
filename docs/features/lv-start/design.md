@@ -132,6 +132,8 @@ interface TaskSplitSuggestion {
 - optional `ui_design`
 - optional `attachments`
 - optional `parent: { ticket_id, title, description }`, the linked parent ticket's own context, recorded only when a parent was fetched
+- optional `big_feature: true`, set only on a parent ticket's big-feature branch (with `feature_ids: []`)
+- optional `base_branch`, set on a sub-task forked from its parent's big-feature branch; the PR target
 
 `writeState()` creates the `docs/changes/<change-id>/` directory if needed and serializes the schema as YAML. `readState()` is used during resume handling (`src/engine/branch-resolution.ts`) to determine whether the branch already has persisted context. A confirmed split never reaches `writeState()` for the parent ticket — no state file is written for it.
 
