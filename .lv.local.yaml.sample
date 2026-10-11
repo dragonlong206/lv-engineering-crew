@@ -10,6 +10,11 @@ lark:
   title_field: "Task name"
   sync_new_features: true # Default is true
   features_table_id: "replaced_by_real_id" # only needed if sync_new_features = true
+  attachment_field: "Attachment"
+  project_field: "Project"
+  subtask_parent_field: "Parent Task"
+  assignee_field: "Assignee"
+  order_field: "Order"
 
 lark_app_id: cli_xxxx
 lark_app_secret: xxxx

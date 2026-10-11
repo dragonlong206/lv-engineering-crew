@@ -1,0 +1,12 @@
+ticket_id: reczz28LMkKSORKL
+title: >-
+  When create sub-task when start ticket, the sub-task should have the same
+  features, assignee, order and project with the parent task
+description: ''
+feature_ids:
+  - lv-start
+branch: feature/reczz28LMkKSORKL-when-create-sub-task-when-start-ticket-the-sub-tas
+created_at: '2026-10-11T03:28:32.626Z'
+lv_version: 0.1.0
+openspec_changes:
+  - subtask-inherit-parent-fields
