@@ -156,7 +156,7 @@ lark:
   title_field: "Title" # column name used as the ticket title (branch {summary}, analysis prompt)
   # ui_design_field: "UI Design" # column holding a ticket's UI design reference — omit to skip capture
   # subtask_parent_field: "Parent" # Link field back to the parent ticket — sub-tickets created by a split inherit features/project through it
-  # assignee_field: "Assignee" # person field — copied onto sub-tickets created by a split; omit to skip
+  # assignee_field: "Assignee" # person or link field — copied onto sub-tickets created by a split; omit to skip
   # order_field: "Order" # column copied onto sub-tickets created by a split; omit to skip
 
 default_branch: main

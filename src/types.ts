@@ -97,10 +97,10 @@ export const LarkConfigSchema = z.object({
   // same ticket table `lv start` reads from). Unset skips writing the relationship when a
   // ticket is split into sub-tasks — the sub-tickets are still created either way.
   subtask_parent_field: z.string().optional(),
-  // Column holding a ticket's assignee (a Lark person field). Unset skips inheriting the
+  // Column holding a ticket's assignee (a Lark person field, or a link to a members table). Unset skips inheriting the
   // assignee onto sub-tickets created by a split — there's no default column name to assume.
   assignee_field: z.string().optional(),
-  // Column holding a ticket's order value (number or text). Unset skips inheriting the order
+  // Column holding a ticket's order value (a Number or text column). Unset skips inheriting the order
   // onto sub-tickets created by a split.
   order_field: z.string().optional(),
 });

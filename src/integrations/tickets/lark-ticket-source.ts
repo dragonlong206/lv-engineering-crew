@@ -8,6 +8,7 @@ import {
   updateTicketStatus,
   createSubticket,
   buildInheritedFields,
+  isNumberField,
   type LarkTicket,
 } from '../../tools/lark.js';
 import { printInfo, printSuccess, printWarn, printError } from '../../cli/helpers.js';
@@ -168,7 +169,10 @@ export function createLarkTicketSource(config: Config): LarkTicketSourceHandle {
       const token = await getToken();
       const created: { id: string; title: string }[] = [];
       const failed: { title: string; error: string }[] = [];
-      const inherited = buildInheritedFields(fromRaw(parent), config.lark);
+      const orderIsNumber = config.lark.order_field
+        ? await isNumberField(config.lark.base_id, config.lark.table_id, config.lark.order_field, token)
+        : false;
+      const inherited = buildInheritedFields(fromRaw(parent), config.lark, { orderIsNumber });
       const inheritedNames = Object.keys(inherited);
 
       for (const subtask of subtasks) {

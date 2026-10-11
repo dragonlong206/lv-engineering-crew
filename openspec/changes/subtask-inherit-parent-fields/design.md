@@ -22,8 +22,8 @@ There is no automated test suite (see CLAUDE.md); verification is `tsc --noEmit`
 2. **Per-type conversion:**
    - Features: if `featureIdFieldIsLink`, write `extractLinkRecordIds(raw)`; otherwise copy the raw string/array value as-is.
    - Project: write `extractLinkRecordIds(raw[project_field])` (project is a link field, same as `fetchTicket()` assumes).
-   - Assignee: read `[{id}]` from the person field and write `[{id}]` (drop name/email/avatar).
-   - Order: copy the raw value unchanged (number or text).
+   - Assignee: a link field (e.g. to a members table) is written as linked record IDs; a native person field reads `[{id, name, ...}]` and writes `[{id}]`. Found against a real Base, where Assignee is a DuplexLink.
+   - Order: copy the raw value, except a Number column (detected via the field's declared type) is converted from the string Lark reads back (`"7"`) to a number, which is all it accepts on write.
    Empty/undefined results are omitted from the POST body.
 
 3. **Two new optional config keys, `lark.assignee_field` and `lark.order_field`**, with no defaults. Column names for these vary per Base and there is no safe default; unset means "don't inherit", matching how `ui_design_field`/`attachment_field` behave. Feature and project reuse the already-configured `feature_id_field`/`project_field`, so they inherit without new config.

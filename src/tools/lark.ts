@@ -150,6 +150,23 @@ const LINK_FIELD_TYPES = new Set([18, 21]);
  * than special-casing it.
  */
 async function isLinkField(baseId: string, tableId: string, fieldName: string, token: string): Promise<boolean> {
+  const type = await getFieldType(baseId, tableId, fieldName, token);
+  return type !== undefined && LINK_FIELD_TYPES.has(type);
+}
+
+// Lark Bitable numeric field `type` of a Number field.
+const NUMBER_FIELD_TYPE = 2;
+
+/**
+ * Looks up `fieldName`'s declared Bitable field `type` by paging through the table's field
+ * metadata. Returns `undefined` when no field has that name.
+ */
+export async function getFieldType(
+  baseId: string,
+  tableId: string,
+  fieldName: string,
+  token: string,
+): Promise<number | undefined> {
   let pageToken: string | undefined;
 
   do {
@@ -172,12 +189,26 @@ async function isLinkField(baseId: string, tableId: string, fieldName: string, t
     }
 
     const match = data.data?.items?.find((f) => f.field_name === fieldName);
-    if (match) return LINK_FIELD_TYPES.has(match.type);
+    if (match) return match.type;
 
     pageToken = data.data?.has_more ? data.data.page_token : undefined;
   } while (pageToken);
 
-  return false;
+  return undefined;
+}
+
+/** Whether `fieldName` is declared as a Number field. A failed lookup counts as "no". */
+export async function isNumberField(
+  baseId: string,
+  tableId: string,
+  fieldName: string,
+  token: string,
+): Promise<boolean> {
+  try {
+    return (await getFieldType(baseId, tableId, fieldName, token)) === NUMBER_FIELD_TYPE;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -630,9 +661,10 @@ export async function syncFeatureToLarkTable(
  *
  * - Features and project: a link field reads as `[{record_ids, ...}]` but writes as
  *   `["recXXX"]`, so linked record IDs are extracted. A plain-text feature column is copied as-is.
- * - Assignee: a person field reads as `[{id, name, ...}]` but writes as `[{id}]`, so only `id`
- *   is kept.
- * - Order: copied unchanged (number or text).
+ * - Assignee: a link field (to a members table) is handled like features/project; a native
+ *   person field reads as `[{id, name, ...}]` but writes as `[{id}]`, so only `id` is kept.
+ * - Order: copied unchanged, except a Number field (`options.orderIsNumber`) whose string read
+ *   value ("7") is converted back to a number, which is all Lark accepts on write.
  *
  * Fields the parent has no value for are omitted, so the result only contains keys that should
  * actually be written. Returns `{}` when nothing is inheritable.
@@ -645,6 +677,7 @@ export function buildInheritedFields(
     assignee_field?: string;
     order_field?: string;
   },
+  options: { orderIsNumber?: boolean } = {},
 ): Record<string, unknown> {
   const inherited: Record<string, unknown> = {};
   const raw = parent.rawFields;
@@ -658,16 +691,26 @@ export function buildInheritedFields(
   if (projectRecordIds.length > 0) inherited[config.project_field] = projectRecordIds;
 
   if (config.assignee_field) {
-    const people = Array.isArray(raw[config.assignee_field])
-      ? (raw[config.assignee_field] as { id?: unknown }[])
-          .filter((p) => p && typeof p.id === 'string' && p.id)
-          .map((p) => ({ id: p.id }))
-      : [];
-    if (people.length > 0) inherited[config.assignee_field] = people;
+    // Assignee is either a link to a Members/People table (reads `[{record_ids}]`, writes
+    // `["recXXX"]`) or a native person field (reads `[{id, name, ...}]`, writes `[{id}]`).
+    const value = raw[config.assignee_field];
+    const linkIds = extractLinkRecordIds(value);
+    if (linkIds.length > 0) {
+      inherited[config.assignee_field] = linkIds;
+    } else if (Array.isArray(value)) {
+      const people = (value as { id?: unknown }[])
+        .filter((p) => p && typeof p.id === 'string' && p.id)
+        .map((p) => ({ id: p.id }));
+      if (people.length > 0) inherited[config.assignee_field] = people;
+    }
   }
 
   if (config.order_field && hasValue(raw[config.order_field])) {
-    inherited[config.order_field] = raw[config.order_field];
+    // A Number field reads back as a string ("7") but only accepts a real number on write.
+    const order = raw[config.order_field];
+    const asNumber = typeof order === 'string' ? Number(order) : order;
+    inherited[config.order_field] =
+      options.orderIsNumber && typeof asNumber === 'number' && Number.isFinite(asNumber) ? asNumber : order;
   }
 
   return inherited;
