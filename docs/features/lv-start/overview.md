@@ -45,7 +45,7 @@ Ticket-backed starts fetch the ticket from Lark Base, run a pre-branch complexit
 10. For any referenced feature whose `docs/features/<id>/` directory is missing, generate placeholder feature docs and prompt for confirmation before continuing.
 11. Sync referenced features to the Lark Features table when enabled (`syncFeatureToLarkTable()`, a direct Lark call reusing the `TicketSource`'s cached token via `getAccessToken()`), then write any newly allocated feature IDs back to the ticket via `source.updateFeatureId()` when ticket sync is enabled. These writes are best effort.
 12. Update the ticket status via `source.updateStatus()` when status sync is enabled and the current value differs from the configured in-dev value.
-13. Create the branch if needed, write `docs/changes/<change-id>/state.yaml` (including a `parent` block when a parent was fetched), stage the repository, and commit the change context.
+13. Create the branch if needed (`createBranch()` first runs a non-fatal `git fetch origin`, then checks out the base branch, fast-forwards it with `git pull --ff-only` (also non-fatal), and forks the new branch from it), write `docs/changes/<change-id>/state.yaml` (including a `parent` block when a parent was fetched), stage the repository, and commit the change context.
 14. Print the context path and the OpenSpec next-step hint.
 
 ## Constraints and assumptions

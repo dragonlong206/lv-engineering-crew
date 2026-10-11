@@ -16,6 +16,7 @@ export async function getDefaultBranch(repoRoot: string, configured: string): Pr
 }
 
 export async function createBranch(repoRoot: string, branchName: string, fromBranch: string): Promise<void> {
+  await git(['fetch', 'origin'], repoRoot).catch(() => {});
   await git(['checkout', fromBranch], repoRoot);
   await git(['pull', '--ff-only'], repoRoot).catch(() => {});
   await git(['checkout', '-b', branchName], repoRoot);
