@@ -1,0 +1,12 @@
+ticket_id: reczz28LflKrKbSG
+title: >-
+  When create git branch for the new ticket, before pull base branch, it should
+  fetch latest commits
+description: ''
+feature_ids:
+  - lv-start
+branch: feature/reczz28LflKrKbSG-when-create-git-branch-for-the-new-ticket-before-p
+created_at: '2026-10-11T03:05:20.076Z'
+lv_version: 0.1.0
+openspec_changes:
+  - fetch-before-pull-on-branch-create

@@ -192,7 +192,7 @@ Key supporting functions and interfaces are:
 - `renderBranchName(config, ticketId, { type?, summary? })` in `src/engine/branch-naming.ts`
 - `resolveBaseBranch(config, type)` in `src/engine/branch-naming.ts`
 - `findChangeBranches(repoRoot, config, changeId)` in `src/engine/branch-naming.ts`
-- `createBranch(repoRoot, branchName, fromBranch)` in `src/integrations/git/client.ts`
+- `createBranch(repoRoot, branchName, fromBranch)` in `src/integrations/git/client.ts` (fetches `origin` first, ignoring failure, then checks out `fromBranch`, fast-forward pulls ignoring failure, and runs `checkout -b`)
 - `checkoutBranch(repoRoot, branchName)` in `src/integrations/git/client.ts`
 - `discardLocalBranch(repoRoot, branchName, fromBranch)` in `src/integrations/git/client.ts`
 - `commitAll(repoRoot, message)` in `src/integrations/git/client.ts`
