@@ -8,4 +8,5 @@ feature_ids:
 branch: feature/reczz28LMkKSORKL-when-create-sub-task-when-start-ticket-the-sub-tas
 created_at: '2026-10-11T03:28:32.626Z'
 lv_version: 0.1.0
-openspec_changes: []
+openspec_changes:
+  - subtask-inherit-parent-fields

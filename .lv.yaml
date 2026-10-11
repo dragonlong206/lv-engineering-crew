@@ -63,6 +63,14 @@ lark:
   # sub-tickets, just without recording the parent relationship.
   # subtask_parent_field: "Parent Task"
 
+  # Columns copied from the parent ticket onto each sub-ticket created by a
+  # split. Features (feature_id_field) and project (project_field) are always
+  # inherited; assignee (a Lark person field) and order (a number or text
+  # column) are inherited only when their column is named here. Unset skips
+  # that field, and an empty parent value is never written.
+  # assignee_field: "Assignee"
+  # order_field: "Order"
+
 default_branch: main
 
 # `lv start <ticket-id>`'s pre-branch complexity analysis — whether a ticket

@@ -7,6 +7,7 @@ import {
   updateTicketFeatureId,
   updateTicketStatus,
   createSubticket,
+  buildInheritedFields,
   type LarkTicket,
 } from '../../tools/lark.js';
 import { printInfo, printSuccess, printWarn, printError } from '../../cli/helpers.js';
@@ -167,10 +168,12 @@ export function createLarkTicketSource(config: Config): LarkTicketSourceHandle {
       const token = await getToken();
       const created: { id: string; title: string }[] = [];
       const failed: { title: string; error: string }[] = [];
+      const inherited = buildInheritedFields(fromRaw(parent), config.lark);
+      const inheritedNames = Object.keys(inherited);
 
       for (const subtask of subtasks) {
-        try {
-          const id = await createSubticket(
+        const create = (fields: Record<string, unknown>) =>
+          createSubticket(
             subtask.title,
             subtask.description,
             parent.id,
@@ -179,7 +182,22 @@ export function createLarkTicketSource(config: Config): LarkTicketSourceHandle {
             config.lark.title_field,
             token,
             config.lark.subtask_parent_field,
+            fields,
           );
+        try {
+          let id: string;
+          try {
+            id = await create(inherited);
+          } catch (err) {
+            // Inherited fields can be rejected by Lark (e.g. a field type that doesn't accept
+            // the value written back). Retry once with only title/description/parent link so
+            // the sub-task still exists, and say which inheritance was dropped.
+            if (inheritedNames.length === 0) throw err;
+            printWarn(
+              `Creating sub-task '${subtask.title}' with inherited fields (${inheritedNames.join(', ')}) failed: ${(err as Error).message}. Retrying without them.`,
+            );
+            id = await create({});
+          }
           created.push({ id, title: subtask.title });
         } catch (err) {
           failed.push({ title: subtask.title, error: (err as Error).message });
