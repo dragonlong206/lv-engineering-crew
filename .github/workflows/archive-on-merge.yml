@@ -3,7 +3,9 @@ name: Archive on merge
 # Resolves a merged PR's linked OpenSpec change(s) and feature IDs from
 # docs/changes/<change-id>/state.yaml, archives/syncs those changes, refreshes
 # their feature docs via a headless lv-bootstrap run, and commits the result
-# directly to the default branch. See:
+# directly to the default branch. Features already marked refreshed on the PR
+# branch (state.yaml's refreshed_features, set by `lv bootstrap --finalize`) are
+# skipped so their docs aren't regenerated. See:
 # openspec/changes/auto-archive-sync-on-merge/{proposal.md,design.md}
 
 on:

@@ -13,6 +13,9 @@ import {
   DEFAULT_SKIP_DIRS,
 } from "../tools/codebase.js";
 import { getTenantAccessToken, syncFeatureToLarkTable } from "../tools/lark.js";
+import { currentBranch } from "../integrations/git/client.js";
+import { matchBranch } from "../engine/branch-naming.js";
+import { markFeatureRefreshed, stateExists } from "../engine/state-io.js";
 import type { Config } from "../types.js";
 
 export interface BootstrapScanHint {
@@ -229,9 +232,31 @@ async function runBootstrapFinalize(
   }
 
   updateIndex(repoRoot, featureId);
+  await recordRefreshedOnChangeBranch(config, repoRoot, featureId);
   await syncNewFeatureToLark(config, featureId, title);
 
   printSuccess(`Finalized docs for '${featureId}'.`);
+}
+
+/**
+ * Marks `featureId` as refreshed in the current change's `state.yaml`, so archive-on-merge skips
+ * regenerating it. Non-fatal by design: off a change branch (or with no `state.yaml`) it records
+ * nothing, and a failure to read the branch never fails finalize.
+ */
+async function recordRefreshedOnChangeBranch(
+  config: Config,
+  repoRoot: string,
+  featureId: string,
+): Promise<void> {
+  let branch: string;
+  try {
+    branch = await currentBranch(repoRoot);
+  } catch {
+    return;
+  }
+  const matched = matchBranch(config, branch);
+  if (!matched || !stateExists(repoRoot, matched.ticketId)) return;
+  markFeatureRefreshed(repoRoot, matched.ticketId, featureId);
 }
 
 export interface GeneratedFeatureDocs {

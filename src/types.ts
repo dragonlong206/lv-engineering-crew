@@ -42,6 +42,10 @@ export const StateSchema = z.object({
   // The branch a sub-task was forked from when that was its parent's big-feature branch rather
   // than the branch type's base branch; the PR for this change should target it.
   base_branch: z.string().optional(),
+  // Feature IDs whose docs `lv bootstrap <id> --finalize` has already refreshed on this change's
+  // branch. archive-on-merge skips these so CI doesn't regenerate docs the engineer just wrote.
+  // Omitted (not `[]`) when nothing has been recorded.
+  refreshed_features: z.array(z.string()).optional(),
 });
 export type State = z.infer<typeof StateSchema>;
 

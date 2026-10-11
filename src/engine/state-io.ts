@@ -31,3 +31,12 @@ export function addOpenspecChange(repoRoot: string, changeId: string, openspecCh
   state.openspec_changes = [...state.openspec_changes, openspecChangeName];
   writeState(repoRoot, changeId, state);
 }
+
+/** Idempotently records that a feature's docs were refreshed on this change's branch. */
+export function markFeatureRefreshed(repoRoot: string, changeId: string, featureId: string): void {
+  const state = readState(repoRoot, changeId);
+  const refreshed = state.refreshed_features ?? [];
+  if (refreshed.includes(featureId)) return;
+  state.refreshed_features = [...refreshed, featureId];
+  writeState(repoRoot, changeId, state);
+}
