@@ -1,6 +1,6 @@
 {
   "name": "lv-engineer-crew",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "AI-assisted spec-driven development CLI",
   "type": "module",
   "license": "MIT",
