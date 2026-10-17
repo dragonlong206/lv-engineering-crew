@@ -20,9 +20,10 @@ AI coding agents are fast, but they start every task cold. They don't know what 
 LV fixes this with two ideas:
 
 - **Every feature has living docs** — `docs/features/<feature-id>/overview.md` and `design.md`, generated from the real code and loaded into your agent's context automatically.
-- **Docs stay in sync with the code** — when a change is archived, the docs of every feature it touched are refreshed. Run `/opsx:archive` yourself, or [add LV's CI workflow](#ci-archive--doc-sync-on-merge) to your repo and it happens automatically when a PR merges.
+- **Docs stay in sync with the code** — when a change is archived, the docs of every feature it touched are refreshed. Run `/opsx:archive` yourself, or [add LV's CI workflow](docs/guides/ci.md) to your repo and it happens automatically when a PR merges.
 
 Planning and implementation are driven by [OpenSpec](https://github.com/Fission-AI/OpenSpec) inside your coding agent (explore → propose → spec → design → tasks → apply). LV sets up OpenSpec, feeds it the right context, and refreshes the docs when a change is archived.
+
 
 ## How it works
 
@@ -38,363 +39,70 @@ Planning and implementation are driven by [OpenSpec](https://github.com/Fission-
          └──────────────────── docs stay accurate for the next change ◄─────────────┘
 ```
 
-1. **Set up once** — `lv init --tool claude` installs OpenSpec for your coding agent and wires it to LV's docs. `lv bootstrap` writes a feature's `overview.md`/`design.md` by exploring the existing code.
-2. **Start a change** — `lv start <ticket-id>` pulls the ticket from Lark Base (or `lv start --description "..."` for no ticket), creates a branch, and records the change's context in `state.yaml`.
-3. **Plan and build** — run `/opsx:propose`, `/opsx:apply`, ... in your coding agent. The feature docs and the ticket context are loaded automatically. You review every step.
-4. **Archive** — archiving the OpenSpec change also regenerates the docs of the affected features. Do it by hand with `/opsx:archive`, or let CI do it on merge — **only if you've added the [archive & doc sync workflow](#ci-archive--doc-sync-on-merge) to your repo** (`lv init` doesn't install it for you).
-
-## Key features
-
-- **Living feature docs** — `overview.md` (what the feature does today) and `design.md` (architecture, data model, API contract) per feature, grounded in the actual code and refreshed whenever a change that touches them is archived.
-- **Auto archive & doc sync on merge (opt-in CI)** — add LV's GitHub Actions workflow to your repo and "merged" becomes "specs archived, docs updated", with zero manual steps. Without it, `/opsx:archive` refreshes the docs when you run it yourself.
-- **Context loaded automatically** — every OpenSpec workflow reads the relevant feature docs and ticket context; no copy-pasting into prompts.
-- **Ticket or free text** — start from a Lark Base ticket, or just describe the change. Open to other ticket systems like Jira — see [Ticket systems](#ticket-systems-lark-today-jira-and-others-welcome).
-- **Works with your coding agent** — any agent OpenSpec supports (Claude Code, Cursor, Codex, ...); `lv` doesn't hardcode a list.
-- **Human in the loop** — generated docs are never committed without review during development; you approve each OpenSpec step in your agent.
-- **Fits your git flow** — configurable branch naming per type (`feature/…`, `hotfix/…`), each with its own base branch.
-- **UI design aware** — captures a ticket's Figma link / prototype / attachment and has the agent look at it while writing the proposal.
-
-## Ticket systems: Lark today, Jira and others welcome
-
-Lark Base is the only ticket system LV supports out of the box today, but LV isn't tied to it. `lv start` reaches tickets only through a small `TicketSource` interface ([`src/integrations/tickets/types.ts`](src/integrations/tickets/types.ts)):
-
-- fetch a ticket (title, description, feature IDs, UI design references)
-- download its attachments
-- write feature IDs and status back to the ticket
-- create sub-tickets when a big task is split
-
-Supporting Jira, Linear, GitHub Issues, or an in-house tracker means implementing that interface. The rest of the workflow (branching, `state.yaml`, OpenSpec, doc sync) stays the same. Choosing the source through `.lv.yaml` isn't wired up yet (`lv start` always uses Lark), so a new integration adds that setting too.
-
-Want LV with your ticket system? [Open an issue or a pull request](https://github.com/dragonlong206/lv-engineering-crew/issues). In the meantime, `lv start --description "..."` works with any tracker: paste the ticket's text and go.
-
-## What LV adds to your repo
-
-```
-docs/
-  features/
-    INDEX.md                      # feature list, feature-id → name/path
-    <feature-id>/
-      overview.md                 # current state of the feature
-      design.md                   # architecture, data model, API contract
-  changes/
-    <change-id>/
-      state.yaml                  # ticket/description context for OpenSpec (LV's only artifact here)
-
-openspec/
-  changes/<change-id>/            # proposal.md, specs/, design.md, tasks.md — owned by OpenSpec
-```
-
-`<change-id>` is a ticket ID for ticket-based starts, or a slug derived from the description for description-based ones — the same name identifies both `docs/changes/<change-id>/` and the OpenSpec change under `openspec/changes/<change-id>/`.
-
----
+1. **Set up once** — `lv init` installs OpenSpec for your coding agent and wires it to LV's docs. `lv bootstrap` writes a feature's docs from the existing code.
+2. **Start a change** — `lv start <ticket-id>` pulls the ticket from Lark Base (or `lv start --description "..."` for no ticket), creates a branch, and records context in `state.yaml`.
+3. **Plan and build** — run `/opsx:propose`, `/opsx:apply`, ... in your coding agent. Feature docs and ticket context load automatically.
+4. **Archive** — `/opsx:archive` also refreshes the docs of affected features. Optionally let [CI do it on merge](docs/guides/ci.md).
 
 ## Get started
 
-```bash
-npm install -g lv-engineer-crew   # installs the `lv` binary globally
-
-cd /path/to/target-repo
-# create .lv.local.yaml with your credentials — see Configuration below
-lv init --tool claude             # install/configure OpenSpec, wire it to LV's context
-lv bootstrap <feature-id> --description "feature description"  # generate feature docs from an existing codebase that doesn't have any yet
-lv start <ticket-id>             #  fetch the ticket from Lark, create docs/changes/<ticket-id>/state.yaml
-# or
-lv start --description "..."     #  create docs/changes/<change-id>/state.yaml from free text, no ticket
-```
-
-Then continue with your coding agent's OpenSpec workflow (e.g. `/opsx:propose`) — see [Workflow](#workflow-phase-1) below for the full loop, [Installation](#installation) and [Configuration](#configuration) for details, and [Commands](#commands) for the full command reference.
-
-Working on `lv` itself rather than just using it? See [Installation](#installation) below for the source-build path.
-
-## Workflow (phase 1)
-
-```
-lv init [--tool <tool>]      →  install/configure OpenSpec for a coding agent, wire it to LV's context, for example: lv init --tool claude,cursor,codex
-lv bootstrap <feature-id>    →  ground a feature's docs in the actual code (overview.md + design.md)
-
-lv start <ticket-id>             →  fetch the ticket from Lark, create docs/changes/<ticket-id>/state.yaml
-lv start --description "..."     →  create docs/changes/<change-id>/state.yaml from free text, no ticket
-
-<your coding agent's OpenSpec workflow — e.g. /opsx:propose, /opsx:apply>
-    →  explore, propose, spec, design, tasks, review, and implement,
-       with LV's feature docs and state.yaml loaded automatically as context
-```
-
-`lv init`/`lv bootstrap` populate `docs/features/` and OpenSpec's own install and are independent of any ticket — run them once per repo/feature, whenever needed. `lv start` creates a change's context; everything after that (propose, spec, design, tasks, apply) is driven by OpenSpec through your coding agent, not by a further `lv` command. There is no `lv approve` — review and advance using OpenSpec's own workflow.
-
-Coming back to a change later (after a break, or on a different machine)? Run `lv resume [ticket-id]` to check out its branch and print its `state.yaml` context.
-
-## Installation
-
-Requires: Node.js >= 20
-
-**As a user** — install the published package from npm:
+Requires Node.js >= 20.
 
 ```bash
-npm install -g lv-engineer-crew   # installs the `lv` binary globally
+npm install -g lv-engineer-crew
+
+cd /path/to/your-repo
+cp .lv.local.yaml.sample .lv.local.yaml   # add credentials; see Configuration
+lv init --tool claude                     # or cursor, codex, ... (comma-separated)
+lv bootstrap <feature-id> --description "what the feature does"   # docs for an existing feature
+lv start <ticket-id>                      # from a Lark ticket
+lv start --description "..."              # or from free text, no ticket
 ```
 
-**As a contributor** — build `lv` from source instead:
+Then continue in your coding agent with `/opsx:propose`. Coming back later? `lv resume [ticket-id]`.
 
-```bash
-git clone <repo>
-cd lv-engineer-crew
-npm install
-npm run build
-npm link   # install lv globally, pointing at your local build
-```
+## Minimal configuration
 
-## Configuration
-
-### 1. Repo config (`.lv.yaml` at the root of the target repo)
+`.lv.yaml` at the repo root (committed):
 
 ```yaml
 lark:
   base_id: "YOUR_BASE_ID"
   table_id: "YOUR_TABLE_ID"
-  feature_id_field: "Feature ID" # column name for feature IDs in Lark Base
-  title_field: "Title" # column name used as the ticket title (branch {summary}, analysis prompt)
-  # ui_design_field: "UI Design" # column holding a ticket's UI design reference — omit to skip capture
-  # subtask_parent_field: "Parent" # Link field back to the parent ticket — sub-tickets created by a split inherit features/project through it
-  # assignee_field: "Assignee" # person or link field — copied onto sub-tickets created by a split; omit to skip
-  # order_field: "Order" # column copied onto sub-tickets created by a split; omit to skip
-
+  feature_id_field: "Feature ID"
+  title_field: "Title"
+  # ui_design_field: "UI Design"     # Figma link / prototype / image — captured as a reference
+  # attachment_field: "Attachment"   # Lark attachment column — files are downloaded into docs/changes/<change-id>/attachments/
 default_branch: main
-
-# Branch naming per type — {ticket_id} and {summary} are the only placeholders
-# ({summary} is a slug of the ticket title, filled in by `lv start`). Omit to
-# use the built-in default:
-#   { feature: "feature/{ticket_id}-{summary}", hotfix: "hotfix/{ticket_id}-{summary}" }
-#
-# An entry can be a plain pattern string (forks from default_branch above), or
-# an object with a base_branch to fork that type from something else instead —
-# e.g. a gitflow-style repo where hotfixes branch off master while features
-# branch off develop:
-branch_types:
-  feature:
-    pattern: "feature/{ticket_id}-{summary}"
-    base_branch: develop
-  hotfix:
-    pattern: "hotfix/{ticket_id}-{summary}"
-    base_branch: master
-default_branch_type: feature # used when `lv start` is run without --type
-
-model: openai/gpt-4o # default model
-
-models: # per-step model — omit to use the default
-  bootstrap: openai/gpt-4o-mini
-
-feature_id_prefix: "F" # used by `lv start`'s inline feature bootstrap to allocate feature IDs (e.g. F0001)
-feature_id_digits: 4
-
-# Which files `lv bootstrap`/`lv init` read from the target repo.
-# Omit either to use the built-in default, which already covers a broad set
-# of stacks (TS/JS, Python, Go, Java/Kotlin, Ruby, Rust, C#/.NET/ASP.NET,
-# PHP, C/C++, Swift). Override for a stack the default doesn't cover.
-scan_extensions: [cs, vb, cshtml, razor, csproj, sln, json, xml, config]
-scan_skip_dirs: [bin, obj, .vs, packages, node_modules, .git]
+model: openai/gpt-4o
 ```
 
-**UI Design field** (`lark.ui_design_field`): if a ticket carries a UI design reference — a Figma link, an HTML prototype, or an attached image/PDF — point this at that Lark Base column and `lv start` captures it automatically. It works regardless of the column's type (plain text/URL field, a Lark attachment field with one or more files, or a Lark URL-type field) — `lv` normalizes whatever shape it reads into a flat list of references. Captured references land in `docs/changes/<change-id>/state.yaml` (`ui_design`) and, when a referenced feature is bootstrapped inline, in that feature's generated docs too. `lv` only captures the reference — it never fetches or analyzes the design itself. `lv init` also patches your coding agent's `/opsx:propose` workflow so that when it writes the proposal, it attempts to view the referenced design and reflect what it finds — preferring the [Figma Dev Mode MCP Server](https://developers.figma.com/docs/figma-mcp-server/) for a Figma link when you have one configured, otherwise fetching the URL or reading a local file directly, and falling back to just citing the reference if it can't be reached. Omit `ui_design_field` to skip this entirely.
+`.lv.local.yaml` (gitignored) holds credentials: `lark_app_id`, `lark_app_secret`, `openai_api_key`. Env vars (`LARK_APP_ID`, ...) take priority. Full options (branch naming, scan paths, sub-ticket fields, ...) are in [Configuration](docs/guides/configuration.md).
 
-### 2. Credentials
+## What LV adds to your repo
 
-**Option A — local override file (recommended)**
+```
+docs/
+  features/<feature-id>/{overview.md,design.md}   # living feature docs
+  features/INDEX.md
+  changes/<change-id>/state.yaml                  # ticket/description context for OpenSpec
+openspec/changes/<change-id>/                     # owned by OpenSpec
+```
+
+## More docs
+
+- [Configuration](docs/guides/configuration.md) — `.lv.yaml`, credentials, UI design and attachment fields
+- [Commands](docs/guides/commands.md) — `lv init`, `bootstrap`, `start`, `resume`, `status`
+- [CI workflows](docs/guides/ci.md) — archive & doc sync on merge, npm release
+- [Ticket systems](docs/guides/ticket-systems.md) — Lark today, Jira and others welcome
+
+## Contributing
 
 ```bash
-cp .lv.local.yaml.sample .lv.local.yaml
-# fill in real values — file is gitignored
+git clone <repo> && cd lv-engineer-crew
+npm install && npm run build
+npm link          # global `lv` pointing at your build
+npm run mastra    # traces at localhost:4111
 ```
 
-```yaml
-lark_app_id: cli_xxx
-lark_app_secret: xxx
-openai_api_key: sk-xxx
-# anthropic_api_key: sk-ant-xxx  # only if using Anthropic models
-```
-
-**Option B — env vars**
-
-```bash
-export LARK_APP_ID=cli_xxx
-export LARK_APP_SECRET=xxx
-export OPENAI_API_KEY=sk-xxx
-```
-
-Env vars take priority over `.lv.local.yaml`.
-
-`lark_app_id`/`lark_app_secret` come from a custom app on the Lark Open Platform (open.larksuite.com → your app → Credentials & Basic Info), added as a collaborator on the target Base with Bitable read permission. `lv start` exchanges them for a short-lived `tenant_access_token` per request via the [internal tenant access token API](https://open.larksuite.com/document/server-docs/getting-started/api-access-token/auth-v3/tenant_access_token_internal) — no long-lived token to manage or rotate.
-
-## CI: archive & doc sync on merge
-
-`.github/workflows/archive-on-merge.yml` runs whenever a PR is merged into the repo's default branch. It:
-
-1. Resolves the merged branch to its `docs/changes/<change-id>/state.yaml`, via `scripts/ci/resolve-merged-change.mjs` (no match → the run exits cleanly and makes no changes).
-2. Archives and syncs every OpenSpec change listed in that state's `openspec_changes`, non-interactively (`openspec archive --yes --json`) — already-archived changes are skipped.
-3. Refreshes `docs/features/<id>/{overview.md,design.md}` for every feature ID in `feature_ids`, by running the `lv-bootstrap` skill headlessly through the Claude Code CLI (`claude -p`).
-4. Commits the result **directly to the default branch** (no PR, no required review) — a bot commit under `github-actions[bot]`, or nothing at all if there was nothing to sync.
-
-This is fully automated by design; review generated changes after the fact via `git log`/`git show` rather than before they land.
-
-**Using it in your own repo** — `lv init` does not install this workflow for you yet. Copy `.github/workflows/archive-on-merge.yml` and `scripts/ci/resolve-merged-change.mjs` from this repository into your repo, and replace the "Build lv and expose it on PATH" step (which builds `lv` from this repo's source) with `npm install -g lv-engineer-crew`.
-
-**Pinning the OpenSpec CLI version** — the workflow installs the OpenSpec CLI pinned to whatever version is in the root `.openspec-version` file (a single line, e.g. `1.12.0`), instead of `latest`, so CI's archive/sync behaves the same as your local `openspec archive`/`/opsx:archive` runs. Whenever you intentionally upgrade your local OpenSpec CLI, check the new version (`openspec --version`) and bump `.openspec-version` to match in the same PR.
-
-**Setting up the Claude Code credential** — the doc-refresh step authenticates as a Claude subscription (Pro/Max/Team/Enterprise), not an API key:
-
-```bash
-claude setup-token   # generates a long-lived OAuth token from your Claude subscription
-```
-
-Store the printed token as the `CLAUDE_CODE_OAUTH_TOKEN` repo secret (Settings → Secrets and variables → Actions). If the token expires or is revoked, the workflow's doc-refresh step fails visibly (rather than silently skipping the feature-doc refresh) — re-run `claude setup-token` and update the secret to re-authenticate.
-
-## CI: publish to npm on release
-
-`.github/workflows/release-npm.yml` runs whenever a GitHub Release is published. It:
-
-1. Checks out the exact commit the release tag points at.
-2. Installs dependencies (`npm ci`) and verifies the release tag matches `package.json`'s `version` field, failing before any build/publish step if they differ.
-3. Type-checks (`npx tsc --noEmit`) and builds (`npm run build`) — the same verification this repo's `CLAUDE.md` prescribes for a human doing this manually.
-4. Publishes to the public npm registry (`npm publish`).
-
-**Cutting a release** — as a maintainer:
-
-```bash
-npm version patch   # or minor / major — bumps package.json and creates a git tag
-git push --follow-tags
-```
-
-Then publish a GitHub Release for that tag (via the GitHub UI, or `gh release create`). Publishing the Release is what triggers the workflow — pushing the tag alone does not.
-
-**Authentication — npm Trusted Publishing (OIDC), no token or secret required.** The workflow authenticates via [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers), not a stored `NPM_TOKEN`: npm is removing the "bypass 2FA" option on classic Automation tokens that a non-interactive CI publish would otherwise need, and Trusted Publishing is npm's replacement — GitHub Actions exchanges a short-lived, workflow-scoped OIDC identity for registry access at publish time, with nothing long-lived to store or rotate.
-
-**Prerequisite — the package must exist on the registry first.** npm's Trusted Publisher UI is configured from the package's own settings page, which only exists once the package has been published at least once. `lv-engineer-crew` has not been published yet, so before this workflow can succeed:
-
-1. A maintainer publishes the first version manually, authenticated with their own npm login/2FA: `npm publish` from a clean checkout (`prepublishOnly` builds `dist/` first automatically).
-2. Only after that first publish does step "One-time setup on npmjs.com" below become possible.
-
-Every release after that first manual one goes through the CI workflow.
-
-One-time setup on npmjs.com, as a maintainer with publish access to `lv-engineer-crew` (only possible once the package exists — see Prerequisite above):
-
-1. Go to the package's page → **Settings** → **Publishing access**.
-2. Add a **GitHub Actions** trusted publisher with:
-   - Organization or user: this repo's owner
-   - Repository: this repo's name
-   - Workflow filename: `release-npm.yml`
-3. No GitHub repository secret needs to be created — the workflow already declares the `id-token: write` permission Trusted Publishing needs.
-
-If the Trusted Publisher entry is missing, or its repo/workflow values don't match, the `npm publish` step fails visibly with an authentication error rather than silently skipping the publish. This includes the case where the package doesn't exist on the registry at all yet (see Prerequisite above) — `npm publish` in CI cannot create a brand-new package under Trusted Publishing; only a human's authenticated `npm publish` can.
-
-## Commands
-
-### `lv init [--tool <tool>]`
-
-Install and configure [OpenSpec](https://github.com/Fission-AI/OpenSpec) for a coding agent, wired to LV's context.
-
-```bash
-lv init --tool claude,codex   # install/configure OpenSpec for Claude Code and Codex
-lv init                 # no --tool — OpenSpec's own interactive prompt runs
-```
-
-- Delegates entirely to the OpenSpec CLI (`openspec init --tools <tool>`) — `lv` does not hardcode a list of supported coding agents; whatever `openspec init --help` supports, `--tool` accepts. Refer to [OpenSpec's supported tools](https://github.com/Fission-AI/OpenSpec/blob/main/docs/supported-tools.md)
-- Idempotently appends a pointer to OpenSpec's project-wide `context:` (`openspec/config.yaml`) naming `docs/features/<feature-id>/{overview.md,design.md}` and the current change's `docs/changes/<change-id>/state.yaml`, so OpenSpec's explore/propose/apply workflows load them automatically instead of you pasting them into every prompt
-- Idempotently patches the generated `/opsx:propose` workflow so, when a change's `state.yaml` has a UI design reference, it analyzes it while writing the proposal (see the UI Design field above) — scoped to `/opsx:propose` only, not every workflow
-- Run once per repo (re-running is safe — the OpenSpec install and both patches above are idempotent)
-
-### `lv bootstrap <feature-id> [--paths <paths>] [--name <name>] [--description <description>]`
-
-Generate or refine a feature's docs from the actual code.
-
-```bash
-lv bootstrap checkout-flow --paths src/checkout,src/cart      # explicit paths — reads and summarizes exactly those files
-lv bootstrap F0001                                             # no --paths — agent explores the repo itself
-lv bootstrap F0002 --name "Order refunds" --description "Lets support agents issue partial/full refunds from the order detail page"
-```
-
-Two modes:
-
-- **`--paths` given**: reads code at the specified paths and generates `overview.md`/`design.md` from that content directly (fast, deterministic, no repo exploration).
-- **`--paths` omitted**: an agent autonomously explores the repository (list/read/search tools, similar to how Claude Code explores a codebase) to ground the docs in what it actually finds. If `docs/features/<feature-id>/overview.md`/`design.md` already exist (e.g. drafted by `lv init`), it **refines** them — re-verifying any code-related claims against fresh exploration rather than trusting the draft — instead of overwriting from scratch. `--name`/`--description` seed the exploration with a starting hint when there's no existing draft to work from (ignored, with a warning, if `--paths` is also given).
-
-Both modes:
-
-- Generate `overview.md` and `design.md` with an "AUTO-GENERATED" header
-- Update `docs/features/INDEX.md`
-- **Do not commit** — engineer reviews and commits manually
-
-### `lv start <ticket-id> [--type <type>]` / `lv start --description "<text>" [--type <type>]`
-
-Start a new change, from a Lark ticket or from free text.
-
-```bash
-lv start PROJ-123                                  # fetch PROJ-123 from Lark Base
-lv start PROJ-123 --type hotfix                    # e.g. hotfix/PROJ-123-fix-login-bug
-lv start --description "Let support issue refunds" # no Lark ticket — change-id slugified from the text
-```
-
-By ticket ID:
-
-- Fetches the record from Lark Base; feature IDs with no `docs/features/<id>/` yet are bootstrapped inline (see `lv bootstrap`'s autonomous-scan mode) with a human review gate before continuing
-- Creates the branch (named per `--type`'s pattern in `.lv.yaml`'s `branch_types`, or `default_branch_type` if omitted, with `{summary}` filled in from the ticket title) from that type's configured `base_branch`, or `default_branch` if the type has none configured
-- Writes `docs/changes/<ticket-id>/state.yaml` with the ticket's title, description, feature IDs, and (when `lark.ui_design_field` is configured and set) its UI design reference — this is LV's only artifact for the change; no analysis document is generated
-- Commits and pushes the branch
-
-By description:
-
-- No Lark fetch — the change-id is a slug of a short title derived from the description's first line
-- Creates the branch the same way, using the change-id in place of a ticket ID
-- Writes `docs/changes/<change-id>/state.yaml` with the same shape, `description` set and `ticket_id` omitted
-- Commits and pushes the branch
-
-Either way, continue with your coding agent's OpenSpec workflow (e.g. `/opsx:propose`) — it reads `docs/features/` and this `state.yaml` automatically once `lv init` has wired the context pointer.
-
-### `lv resume [ticket-id]`
-
-Check out a change's branch and print its `state.yaml` context — for picking a change back up after a break, or on a different machine.
-
-```bash
-lv resume            # uses the current branch
-lv resume PROJ-123   # finds and checks out PROJ-123's branch, whatever type it is
-```
-
-- Recognizes a branch under any configured type (`feature/PROJ-123-...`, `hotfix/PROJ-123-...`, ...), not just the default
-- Given a ticket ID: finds all its branches across every type (local and remote) by ticket ID alone, ignoring the `{summary}` suffix; one match checks it out directly, multiple matches asks you to pick, no matches falls back to the default type's rendered name
-- Given no ticket ID and the current branch isn't a change branch: lists every change branch found (any type) and asks which one to resume, instead of just failing
-- Prints the resolved change's `state.yaml` summary and a reminder to continue via your coding agent's OpenSpec workflow
-
-### `lv status`
-
-Print the current change's `state.yaml` context.
-
-```bash
-lv status
-```
-
-```
-Change:      PROJ-123
-Ticket:      PROJ-123
-Title:       Fix login redirect loop
-Description: Users get bounced back to /login after a successful SSO callback.
-Features:    checkout-flow
-Branch:      feature/PROJ-123-fix-login-redirect-loop
-Created:     2026-08-26T09:02:00.000Z
-Version:     0.1.0
-```
-
-## Prerequisites to start a ticket
-
-For a ticket-based `lv start`, the Lark Base record's Feature ID field is optional — an empty field or a feature with no `docs/features/<id>/` directory is bootstrapped inline rather than treated as an error.
-
-## Tracing
-
-```bash
-npm run mastra   # open localhost:4111 to view traces
-```
-
-## Stack
-
-- TypeScript + Node.js
-- [Mastra](https://mastra.ai) — agent, thread memory, MCP client, OTel tracing
-- LibSQL (SQLite local) — agent conversation history
-- `state.yaml` in git — single source of truth for business state
+Stack: TypeScript, [Mastra](https://mastra.ai), LibSQL, `state.yaml` in git as the source of truth.
